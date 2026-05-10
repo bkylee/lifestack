@@ -105,13 +105,18 @@ If I propose something that violates conventions in this file, has a real proble
 
 ## Documentation requirements
 
-This project has three kinds of documentation:
+This project has four kinds of documentation:
 
 1. **Reference docs** — how each service/library works *in this project*
 2. **Architectural Decision Records (ADRs)** — why we chose what we chose
 3. **Operational runbooks** — how to actually run the thing
+4. **Build changelog** — narrative record of what was built each step and why
 
-All three live under `docs/`. Maintain them as code changes.
+All four live under `docs/`. Maintain them as code changes.
+
+When completing a build step, add a section to `docs/changelog.md` covering: what the step produced, what non-obvious decisions were made, what configuration choices mean, and what was verified. This is the pedagogical record — future sessions and future-me should be able to read it and understand not just what was done but why.
+
+Also keep `docs/architecture.md` updated whenever the architecture meaningfully changes — new services added, deployment topology changes, or current-vs-target state shifts.
 
 ### Service reference docs (`docs/services/`)
 
