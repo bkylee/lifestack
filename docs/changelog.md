@@ -53,7 +53,7 @@ Narrative record of each build step — what was done, why, and what the non-obv
 ---
 
 ### Step 2 — shadcn/ui initialization, Tailwind v4 theme, component baseline
-*Commits: `TBD`*
+*Commit: `1b205d4`*
 
 #### What the init did
 
