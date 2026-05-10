@@ -165,7 +165,7 @@ Skipped: the `Authenticator` model (WebAuthn/passkeys). Not used in v1 — Googl
 ---
 
 ### Step 5 — Auth.js v5, Google + GitHub OAuth, Prisma-backed sessions
-*Commit: `TBD`*
+*Commit: `0a22c0b`*
 
 #### What was created
 
