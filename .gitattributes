@@ -1,0 +1,17 @@
+# Enforce LF line endings for all text files.
+# This prevents Windows from silently converting LF→CRLF on checkout,
+# which would cause Docker builds and Node scripts in WSL to see wrong endings.
+* text=auto eol=lf
+
+# Treat these explicitly as binary to avoid any diff/merge mangling.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
