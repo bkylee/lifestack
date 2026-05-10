@@ -49,3 +49,36 @@ Narrative record of each build step — what was done, why, and what the non-obv
 
 #### Notes
 `README.md` still contains the default "bootstrapped with create-next-app" content. It will be replaced with real project documentation later in the project.
+
+---
+
+### Step 2 — shadcn/ui initialization, Tailwind v4 theme, component baseline
+*Commits: `TBD`*
+
+#### What the init did
+
+**`components.json`** — shadcn's project configuration. Tells the CLI where your CSS lives, what import alias you use, which icon library, and which preset. Key values: `"style": "radix-nova"` (Nova preset — Lucide icons + Geist font), `"rsc": true` (components are Server Component compatible by default), `"cssVariables": true` (colors are CSS custom properties, not hardcoded values).
+
+**`app/globals.css` — extended with the shadcn theme.** Three new imports were added on top of the existing `@import "tailwindcss"`:
+- `@import "tw-animate-css"` — animation utilities (Tailwind v4 replacement for `tailwindcss-animate`)
+- `@import "shadcn/tailwind.css"` — shadcn's base reset and component styles
+- `@custom-variant dark` — defines `.dark` class-based dark mode
+
+The `@theme inline` block was extended with the full set of color tokens (`--color-primary`, `--color-muted`, `--color-destructive`, etc.) and a radius scale. All color values are **OKLCH** — a perceptually uniform color space where equal numeric steps produce equal visual lightness changes (HSL does not have this property). To change the app's primary color, change `--primary` in the `:root` block.
+
+**`lib/utils.ts` — the `cn()` function.** Every shadcn component uses this. It combines `clsx` (joins conditional class arrays into a string) and `tailwind-merge` (deduplicates conflicting Tailwind utilities — if both `p-2` and `p-4` are passed, `tailwind-merge` keeps only `p-4`). Without `tailwind-merge`, the last class in the CSS file wins, which is non-obvious and hard to debug.
+
+#### Components installed
+
+**`components/ui/button.tsx`** — installed by the Nova preset init automatically. Uses `cva` (class-variance-authority) to define variants (`default`, `outline`, `secondary`, `ghost`, `destructive`, `link`) and sizes (`xs`, `sm`, `default`, `lg`, `icon`, `icon-sm`, `icon-lg`) as a type-safe API — TypeScript will reject invalid variant/size combinations. Also supports `asChild`: passing `asChild` renders button styles on a child element instead (e.g., a `<Link>` that looks like a button). No `'use client'` — usable in server components.
+
+**`components/ui/avatar.tsx`** — added separately for Step 6. Built on Radix UI's Avatar primitive, which handles image loading state (loaded → show image, error → show fallback, loading → show nothing until resolved). Exports `Avatar`, `AvatarImage`, `AvatarFallback`, `AvatarBadge`, `AvatarGroup`, `AvatarGroupCount`. Has `'use client'` because the Radix primitive uses hooks internally to track image load state.
+
+#### The pnpm 11 build script pattern
+
+This was the second time the same pnpm 11 security model blocked native build scripts. `msw` (Mock Service Worker — a transitive dependency pulled in by shadcn) needed approval alongside the `sharp` and `unrs-resolver` approvals from Step 1. Each new package with a native build script needs a one-line addition to `pnpm-workspace.yaml`. This is working as intended — pnpm 11 requires explicit opt-in for each package rather than blanket trust.
+
+#### Verified
+- `pnpm typecheck` → zero errors
+- `components/ui/button.tsx`, `components/ui/avatar.tsx`, `lib/utils.ts` present
+- `globals.css` updated with full OKLCH theme token set
