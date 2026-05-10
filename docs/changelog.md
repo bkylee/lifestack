@@ -82,3 +82,46 @@ This was the second time the same pnpm 11 security model blocked native build sc
 - `pnpm typecheck` → zero errors
 - `components/ui/button.tsx`, `components/ui/avatar.tsx`, `lib/utils.ts` present
 - `globals.css` updated with full OKLCH theme token set
+
+---
+
+### Step 3 — Docker Compose, Postgres 16, local database
+*Commit: `TBD`*
+
+#### What was created
+
+**`docker-compose.yml`** — defines a single `postgres` service using the `postgres:16-alpine` image. Alpine variant is used because it's ~50% smaller than the full Debian-based image with no functional difference for our use case.
+
+Key settings:
+- `restart: unless-stopped` — container restarts automatically after `docker compose up -d`, even after Docker Desktop restarts, unless you explicitly stop it with `docker compose down`
+- `POSTGRES_USER / PASSWORD / DB` — credentials and database name for local dev only; not production credentials
+- `5432:5432` — maps the container's Postgres port to the same port on localhost, so `localhost:5432` works from the app
+- Named volume `postgres_data` — data persists between container restarts. Without a named volume, every `docker compose down` would wipe the database
+- `healthcheck` — polls `pg_isready` every 5 seconds so `docker compose ps` shows `(healthy)` once Postgres is fully initialized (not just started). Prisma will use this in Step 4 to know the DB is ready
+
+**`.env.local`** — gitignored (matches `.env*` in `.gitignore`). Contains the `DATABASE_URL` Prisma needs to connect. For local dev: `postgresql://lifestack:lifestack_dev@localhost:5432/lifestack`. In production this value comes from Azure Key Vault, not a file.
+
+**`.env.example`** — committed to the repo. Documents every environment variable the project needs, with placeholder values. Serves as the canonical list of what to populate when setting up a new dev environment. Updated each time a new env var is added.
+
+#### Why Postgres 16 specifically
+
+Azure Database for PostgreSQL Flexible Server supports up to Postgres 16. Running the same version locally eliminates a class of compatibility bugs — a SQL feature or behavior that works in the local Docker container is guaranteed to work in production. Never run a different Postgres version locally than you run in production.
+
+#### Docker architecture note
+
+The container runs inside Docker Desktop's Linux VM on Windows, but the WSL2 integration makes it transparent: `docker` commands from the WSL terminal talk directly to the Docker daemon, and `localhost:5432` from the Next.js app (also running in WSL) resolves to the container. The data volume (`lifestack_postgres_data`) lives in Docker's VM storage, not in the WSL filesystem — which is why you manage it with `docker volume` commands rather than finding it on disk.
+
+#### Day-2 operations
+
+```bash
+docker compose up -d          # Start Postgres in the background
+docker compose down           # Stop container (data volume preserved)
+docker compose down -v        # Stop AND delete the data volume (full reset)
+docker compose ps             # Check status and health
+docker compose logs postgres  # View Postgres logs
+docker compose exec postgres psql -U lifestack -d lifestack  # Open psql shell
+```
+
+#### Verified
+- `docker compose ps` → `(healthy)`, port `0.0.0.0:5432->5432/tcp`
+- `pg_isready -U lifestack -d lifestack` → accepting connections
