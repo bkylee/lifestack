@@ -262,3 +262,107 @@ Working local dev loop end-to-end:
 - Home page that branches on auth state, signed-in showing avatar + name
 
 Phase 2 (infrastructure baseline — Terraform modules, Azure deploy, Front Door, etc.) is the next chunk of work and has not been started.
+
+---
+
+## Phase 2: Infrastructure baseline
+
+Each sub-step provisions one slice of the architecture and ships with a corresponding service doc and ADR (where the decision is non-obvious). v1 deploys only the prod environment; dev and staging are structured into the Terraform layout but not provisioned.
+
+### Step 2.1 — Subscription, provider registration
+*Commit: `TBD`*
+
+#### Why a dedicated subscription
+
+The default Azure subscription on the user's account already had an unrelated personal project. Best-practice for any production-scoped workload — and especially for one we want clean cost reporting on — is a dedicated subscription per workload per environment. Reasons:
+
+- **Blast radius isolation.** Accidental destroy operations only affect the project sub.
+- **Cost reporting.** Per-subscription billing reports show real Lifestack monthly cost without filtering — enables Phase-12's `docs/operations/cost.md` deliverable.
+- **Quota isolation.** Postgres, Container Apps, and Front Door regional quotas are per-subscription.
+- **Career-goal alignment.** "One sub per workload per environment" is the standard enterprise topology — setting it up that way now is the concept-to-production bridge for the architect track.
+
+The user already had two subscriptions visible. The non-default one ("Subscription 1") was audited via `az resource list` / `az group list` / `az role assignment list` and found completely empty — zero resource groups, zero resources, zero custom RBAC. It was renamed to `Lifestack` via the portal and adopted as the v1 prod target.
+
+#### Subscription details
+
+- Name: `Lifestack`
+- ID: `4bae3a60-95fa-468b-8088-95fd0d23311e`
+- Tenant: `8f06ae15-e337-408c-abe2-da17244ad3a8`
+- Type: pay-as-you-go (shared billing account with the user's other sub)
+
+#### Resource providers registered
+
+Azure resource providers must be registered in a subscription before you can create resources of those types. Most register on demand on first use, but registering up-front avoids a 2–3 minute wait on the first `terraform apply`. Nine providers registered (all completed in ~20 seconds):
+
+- `Microsoft.App` — Container Apps
+- `Microsoft.Cdn` — Front Door (Standard/Premium tier sits under Microsoft.Cdn)
+- `Microsoft.ContainerRegistry` — ACR
+- `Microsoft.DBforPostgreSQL` — Postgres Flexible Server
+- `microsoft.insights` — Application Insights (lowercase namespace, an Azure naming oddity)
+- `Microsoft.KeyVault` — Key Vault
+- `Microsoft.Network` — VNet, NSG, Private Endpoint, Private DNS Zones
+- `Microsoft.OperationalInsights` — Log Analytics
+- `Microsoft.Storage` — Blob Storage
+
+#### Verified
+
+- `az account show --query name` → `Lifestack`
+- All 9 providers in `Registered` state
+
+---
+
+### Step 2.2 — Terraform state backend, `infra/` skeleton
+*Commit: `TBD`*
+
+#### What was created
+
+**State backend (bootstrapped via `az` CLI, not Terraform — chicken-and-egg):**
+
+- Resource Group: `rg-lifestack-tfstate` (East US)
+- Storage Account: `stlifestack9k3l` (Standard_LRS)
+- Container: `tfstate`
+- State blob key: `prod.tfstate`
+
+**Why bootstrap via `az` CLI instead of Terraform.** Terraform needs a state backend to run. The state backend itself can't be Terraform-managed unless we provision it with local state and migrate (`terraform init -migrate-state`). Bootstrapping via `az` CLI is HashiCorp's documented pattern — the state SA is treated as one-time pre-Terraform infrastructure, outside the Terraform-managed estate. Cleaner, fewer steps, no dual-state to reconcile.
+
+**Security posture on the state SA — locked down from creation:**
+
+- `httpsOnly: true`, `minTls: TLS1_2` — no plaintext or weak crypto
+- `allowBlobPublicAccess: false` — no anonymous reads at any scope
+- `allowSharedKeyAccess: false` — no shared-key auth, AAD only
+- Blob versioning enabled — every state-modifying apply creates a recoverable version
+- 7-day soft delete on container and blob deletion — accidentally `terraform destroy`-ing the state is recoverable for a week
+- "Storage Blob Data Contributor" role granted to the team member's user OID
+
+The Owner-vs-data-plane subtlety bit immediately: subscription Owner is a control-plane role only. With shared-key auth disabled, the only way to read/write blobs is via AAD, which requires a Storage Blob Data role explicitly assigned. Owner-on-the-sub does *not* cover this — the role assignment was a required step, not a nicety.
+
+**Terraform skeleton in `infra/environments/prod/`:**
+
+- `versions.tf` — Terraform `~> 1.15`, AzureRM `~> 4.0`, Random `~> 3.6`
+- `backend.tf` — AzureRM backend pinned to the state SA, with `use_azuread_auth = true` (mandatory because shared-key is disabled)
+- `main.tf` — provider config block: `prevent_deletion_if_contains_resources = true` on RGs (safety against `terraform destroy` typos), `purge_soft_delete_on_destroy = false` and `recover_soft_deleted_key_vaults = true` on Key Vault (recoverability)
+- `variables.tf` — `subscription_id`, `location`, `environment`, `project` inputs
+- `terraform.tfvars` — sub ID committed (non-secret per Microsoft guidance)
+- `infra/.gitignore` — ignores `.terraform/`, `*.tfstate*`, `*.tfplan`; explicitly notes `.terraform.lock.hcl` is committed
+
+#### Naming convention locked in
+
+Following the Microsoft Cloud Adoption Framework abbreviations. Documented in full in `docs/services/terraform.md`. Pattern: `<type>-lifestack-<purpose|env>` for resources that allow hyphens, `<type>lifestack<purpose>{rand}` for resources that don't (storage accounts, ACR). The 4-char `{rand}` suffix is needed for resources whose names are globally unique across all of Azure (storage accounts, ACR, Key Vault, Front Door endpoint).
+
+#### Auth model
+
+- **Local dev:** `az login` → AzureRM provider auto-detects CLI auth → state backend uses the same identity for AAD blob ops
+- **CI (Phase 2.x, not yet wired):** GitHub Actions → workload identity / OIDC federation → AzureRM provider with no static credentials
+
+#### Verified
+
+- `terraform init` → providers downloaded (AzureRM 4.72.0, Random 3.8.1), backend connected, `.terraform.lock.hcl` generated
+- `terraform validate` → "Success! The configuration is valid."
+- `terraform plan` → "No changes. Your infrastructure matches the configuration." State lock acquired and released — confirms AAD auth and SA access work end-to-end
+- `az storage container exists --auth-mode login` against the state SA → `true` (data-plane RBAC propagated correctly)
+
+#### Cost so far
+
+- State SA (Standard_LRS, KB-sized state files): ~$0.02/month
+- No app-side resources provisioned yet
+
