@@ -58,6 +58,8 @@ Three things to hold in your head:
 
 3. **`db` is imported from `lib/db.ts`, always.** Never do `new PrismaClient()` anywhere else in the codebase. The singleton file is the single import point.
 
+4. **Migration files are the deployment mechanism.** Each file in `prisma/migrations/` is a SQL script that has already been applied to the local Docker database. Prisma tracks which migrations have run by writing to a `_prisma_migrations` table in the database. When the app is deployed to Azure in Phase 2, the deploy step runs `prisma migrate deploy` against the Azure Postgres instance — Prisma reads that table, skips migrations that have already run, and applies only the new ones in order. This is how schema changes reach production safely: not by re-running `db:push` (which has no history), but by replaying the exact sequence of committed migration files. Never delete or edit a migration file that has been applied to any environment.
+
 ## Alternatives considered
 
 **Drizzle ORM:** SQL-first ORM with strong TypeScript support. Requires writing SQL-like syntax directly. More explicit, smaller runtime, no code generation step. We chose Prisma because the schema-first workflow (define in schema, generate client) is easier to follow when learning, and Auth.js has a first-class Prisma adapter. Drizzle would be a reasonable choice for a team already comfortable with SQL.
