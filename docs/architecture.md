@@ -1,12 +1,106 @@
 # Architecture
 
-> Living document. Update when the architecture meaningfully changes. Diagram and network topology sections will be completed in Phase 2 when infrastructure is deployed.
+> Living document. The diagrams and the current-vs-target table are kept in step with reality — every architecture-changing step updates them before the step is considered done. The detailed network topology diagram lands with Step 2.3 (network module).
 
 ---
 
 ## High-level architecture diagram
 
-*To be added in Phase 2 (Infrastructure baseline). Will show: browser → Front Door → Container Apps → PostgreSQL / Blob Storage / Key Vault, with the Log Analytics workspace as the unified observability sink.*
+### Current state (Phase 1 complete + Phase 2 steps 2.1–2.2)
+
+The application runs entirely on the developer's WSL2 machine. The only Azure footprint is the Terraform state backend.
+
+```mermaid
+flowchart TB
+  Browser((Browser))
+  Google[Google OAuth]
+  GitHub[GitHub OAuth]
+
+  subgraph Local["Local dev (WSL2)"]
+    Next["Next.js 16 dev server<br/>localhost:3000<br/>(Turbopack)"]
+    Pg[("Postgres 16<br/>localhost:5432<br/>(Docker container)")]
+    Next <-->|TCP| Pg
+  end
+
+  Browser <-->|HTTP| Next
+  Browser <-.->|OAuth redirect + callback| Google
+  Browser <-.->|OAuth redirect + callback| GitHub
+  Next <-.->|server-side token exchange| Google
+  Next <-.->|server-side token exchange| GitHub
+
+  subgraph AzureSub["Azure subscription: Lifestack"]
+    subgraph TfRG["rg-lifestack-tfstate (East US)"]
+      SA["Storage Account<br/>stlifestack9k3l<br/>HTTPS · TLS1.2 · AAD-only"]
+      Cont["Container: tfstate"]
+      Blob["prod.tfstate"]
+      SA --> Cont --> Blob
+    end
+  end
+
+  TfCLI["Terraform CLI<br/>(developer machine)"]
+  TfCLI <-->|AAD auth via az login| SA
+```
+
+### Target state (end of Phase 2 — v1 prod)
+
+The application moves into Azure Container Apps. Internet traffic enters through Front Door; data services are reached privately via Private Endpoints. Resource groups are split by tier (network / data / app / observability / state) for permission and lifecycle separation.
+
+```mermaid
+flowchart TB
+  Browser((Browser))
+
+  subgraph AzureSub["Azure subscription: Lifestack — East US"]
+    direction TB
+
+    FD["Front Door Standard<br/>WAF · CDN · TLS"]
+
+    subgraph NetRG["rg-lifestack-network-prod"]
+      VNet["VNet vnet-lifestack-prod<br/>10.10.0.0/16<br/>3 subnets · 4 PE DNS zones"]
+    end
+
+    subgraph AppRG["rg-lifestack-app-prod"]
+      ACAEnv["ACA env<br/>cae-lifestack-prod<br/>(workload profiles)"]
+      ACAApp["ca-lifestack-web-prod<br/>Next.js container<br/>(scale-to-zero)"]
+      ACR["ACR Standard<br/>crlifestack...."]
+      ACAEnv --> ACAApp
+      ACAApp -.->|pulls image| ACR
+    end
+
+    subgraph DataRG["rg-lifestack-data-prod"]
+      Pg[("Postgres Flex B1ms<br/>psql-lifestack-prod")]
+      Stor[("Blob Storage<br/>stlifestackimages....<br/>thumb / feed / full / original")]
+      KV["Key Vault<br/>kv-lifestack-prod-...."]
+    end
+
+    subgraph ObsRG["rg-lifestack-observability-prod"]
+      AI["App Insights<br/>appi-lifestack-prod"]
+      LA["Log Analytics<br/>log-lifestack-prod"]
+      AI --> LA
+    end
+
+    subgraph TfRG["rg-lifestack-tfstate"]
+      State["State SA<br/>stlifestack9k3l"]
+    end
+
+    MI["Managed identity<br/>id-lifestack-web-prod"]
+    ACAApp -.->|uses| MI
+  end
+
+  Browser -->|HTTPS| FD
+  FD -->|HTTPS| ACAApp
+  ACAApp -.->|Private Endpoint| Pg
+  ACAApp -.->|Private Endpoint · AAD| Stor
+  ACAApp -.->|Private Endpoint · AAD| KV
+  ACAApp -.->|telemetry| AI
+  FD -.->|diagnostics| LA
+  Pg -.->|diagnostics| LA
+  Stor -.->|diagnostics| LA
+  ACAApp -.->|stdout/stderr| LA
+```
+
+Solid arrows are user/request traffic. Dotted arrows are private-network or telemetry connections. All five RGs live in the same subscription and the same region; resource groups separate concerns (permissions, lifecycle, blast radius), not boundaries.
+
+> Diagrams are kept in step with reality. Each architecture-changing step (new tier, new service, deployment topology shift) updates these blocks before the step is considered done.
 
 ---
 
@@ -128,21 +222,23 @@ Server actions bypass Front Door's CDN (POST requests are not cached). They run 
 
 ## Current state vs target state
 
-| Layer | Current (Phase 1) | Target (Phase 2+) |
+| Layer | Current (mid Phase 2) | Target (end of Phase 2) |
 |---|---|---|
-| App | Running locally, `pnpm dev` | Containerized, deployed to Container Apps |
-| Database | Docker Postgres on localhost | Azure Database for PostgreSQL Flexible Server |
-| Storage | Not configured | Azure Blob Storage |
-| Edge | None | Azure Front Door Standard |
-| Secrets | `.env.local` | Azure Key Vault via managed identity |
-| Observability | Console / browser devtools | Application Insights + Log Analytics |
-| IaC | Not started | Terraform, `infra/environments/prod/` deployed |
-| CI/CD | Not started | GitHub Actions (infra + app pipelines) |
+| Subscription | `Lifestack` provisioned, 9 resource providers registered (Step 2.1) | unchanged |
+| IaC | Terraform state backend bootstrapped; `infra/environments/prod/` skeleton with empty plan green (Step 2.2) | All v1 resources defined as Terraform modules and applied to prod |
+| Network | None | VNet `10.10.0.0/16` with 3 delegated/restricted subnets and 4 private DNS zones (Step 2.3) |
+| App | Running locally via `pnpm dev` | Containerized, deployed to Container Apps with workload profiles + scale-to-zero |
+| Database | Docker Postgres on localhost | Azure Postgres Flex B1ms reached via private endpoint |
+| Storage | Not configured | Blob Storage with private endpoint, separate containers for image sizes |
+| Edge | None | Front Door Standard with WAF |
+| Secrets | `.env.local` | Key Vault accessed via managed identity over private endpoint |
+| Observability | Console / browser devtools | App Insights + Log Analytics workspace, all components shipping logs |
+| CI/CD | Not started | GitHub Actions — separate infra and app pipelines |
 
-Movement from current to target state is triggered by completing Phase 2 (Infrastructure baseline).
+Each row moves from Current to Target as the corresponding Phase 2 sub-step completes. The "Current" column is updated every step to reflect what is actually deployed.
 
 ---
 
 ## Network topology
 
-*To be added in Phase 2. Will document: VNet layout, subnet purposes (app subnet, data subnet, private endpoint subnet), NSG rules, Private Endpoints for Postgres and Blob Storage, DNS configuration.*
+A detailed VNet/subnet/DNS-zone diagram will be added with **Step 2.3 (network module)**. The high-level target diagram above already shows the VNet sitting in `rg-lifestack-network-prod` with three subnets (`snet-aca-prod`, `snet-pg-prod`, `snet-pe-prod`) and four privatelink DNS zones; the detailed view will add address ranges, delegations, NSG rules, and the per-resource Private Endpoint mapping.
