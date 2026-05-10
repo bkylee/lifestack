@@ -47,9 +47,10 @@ The `[...nextauth]` catch-all segment matches every path under `/api/auth/` — 
 **`proxy.ts` — Next.js 16 session routing:**
 ```ts
 export { auth as proxy } from "@/lib/auth"
-export const runtime = "nodejs"
 ```
-In Next.js 16, `middleware.ts` was renamed to `proxy.ts`. This file runs on every request before the page renders. Exporting `auth as proxy` tells Auth.js to check for a valid session on each request and handle redirects. `runtime = "nodejs"` is explicit: the Prisma adapter needs a Node.js process to open database connections — the Edge runtime cannot do this.
+In Next.js 16, `middleware.ts` was renamed to `proxy.ts`. This file runs on every request before the page renders. Exporting `auth as proxy` tells Auth.js to check for a valid session on each request and handle redirects.
+
+Unlike Next.js 15's `middleware.ts` (which defaulted to Edge and required an explicit `runtime = "nodejs"` opt-in to reach the database), the Next.js 16 proxy is **always** Node.js. Setting `runtime` here is not just unnecessary but actively rejected — Next.js logs `Route segment config is not allowed in Proxy file`. The Prisma adapter therefore works without ceremony.
 
 **Environment variables (all required):**
 

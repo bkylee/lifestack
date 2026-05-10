@@ -173,7 +173,7 @@ Skipped: the `Authenticator` model (WebAuthn/passkeys). Not used in v1 — Googl
 
 **`app/api/auth/[...nextauth]/route.ts`** — two lines. The `[...nextauth]` catch-all dynamic route matches every path under `/api/auth/`: `/api/auth/callback/google`, `/api/auth/callback/github`, `/api/auth/signin`, `/api/auth/signout`, and others. Auth.js handles all of them internally via the `handlers` export. We never write logic here.
 
-**`proxy.ts`** — Next.js 16's renamed `middleware.ts`. Exporting `auth as proxy` makes Auth.js check for a valid session on every request and handle unauthenticated redirects. The explicit `runtime = "nodejs"` is necessary: the Prisma adapter opens database connections, which requires Node.js — the Edge runtime cannot do this. Earlier research flagged that Next.js 16 moved the proxy to Node.js runtime by default, but the explicit declaration is documentation.
+**`proxy.ts`** — Next.js 16's renamed `middleware.ts`. Exporting `auth as proxy` makes Auth.js check for a valid session on every request and handle unauthenticated redirects. Initially this file also exported `runtime = "nodejs"` as "explicit documentation" — Step 6 caught Next.js 16 actively rejecting that route segment config and the line was removed. The proxy is always Node.js in Next.js 16; the Prisma adapter works without any runtime opt-in.
 
 **`.env.local`** — added `AUTH_SECRET` (generated with `openssl rand -base64 32`) and placeholders for `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`. Auth.js v5 auto-detects the `AUTH_{PROVIDER}_{ID|SECRET}` naming convention.
 
@@ -197,3 +197,68 @@ Every subsequent request: `proxy.ts` calls `auth()` → Prisma looks up the sess
 #### Verified
 - `pnpm typecheck` → zero errors
 - All four files created: `lib/auth.ts`, `app/api/auth/[...nextauth]/route.ts`, `proxy.ts`, `.env.local` updated
+
+---
+
+### Step 6 — Auth-aware home page, sign-in / sign-out, Phase 1 complete
+*Commit: TBD*
+
+#### What was created
+
+**`app/page.tsx`** — replaced the placeholder with a server component that calls `await auth()` and branches on session state.
+
+- **Signed out:** "Lifestack" headline + two buttons ("Continue with Google", "Continue with GitHub"). Each button is wrapped in a `<form>` whose `action` is an inline server action that calls `signIn("google", { redirectTo: "/" })` or `signIn("github", …)`.
+- **Signed in:** Avatar (image with initials fallback) + "Signed in as <name>" + a sign-out button (same form / server-action pattern wrapping `signOut`).
+
+No `'use client'` anywhere — the entire home page renders on the server.
+
+#### Why server actions in form `action` props (not a client component)
+
+Auth.js v5's `signIn` and `signOut` are server-side functions: they need access to cookies, `AUTH_SECRET`, and the database. The form-action pattern hands the click off to the server without making the page interactive on the client, which keeps the entire home page on the server boundary.
+
+The alternatives we didn't pick:
+- **`'use client'` + `next-auth/react`'s client-side `signIn`** — works, but it's the JWT-session pattern (the client lib reads sessions from cookies via JS). We're using database sessions, so we want the server to be the only thing that talks to the session table.
+- **Client component that POSTs to `/api/auth/signin/<provider>` directly** — bypasses the convenience helpers and re-implements the flow in our own code. More fragile, more code, no benefit.
+
+The inline `"use server"` directive at the top of the action function body is the documented Auth.js v5 idiom for App Router.
+
+#### Avatar with image + initials fallback
+
+`getInitials()` takes the first two whitespace-separated tokens of the name, takes the first letter of each, uppercases. Missing or unparseable name falls back to `?`. Radix's Avatar primitive automatically swaps to `AvatarFallback` when `AvatarImage` fails to load (or has no `src`), so we get image-with-graceful-fallback behavior for free — no manual loading-state plumbing.
+
+The Avatar `size` prop variants top out at `lg` (40px); for the focal-point avatar on the home page we override via `className="size-16"` (64px). `tailwind-merge` (via `cn()`) drops the variant's `size-8` and keeps `size-16`.
+
+#### Why text-only buttons (no Google / GitHub icons)
+
+Lucide doesn't ship a Google glyph (Lucide is a UI-symbol library, not a brand-icon library). Pulling in `react-icons` or inlining brand SVGs for two buttons isn't worth the dependency or the visual-fidelity gymnastics. Easy to add later if Step 12 (polish) wants it.
+
+#### Correction from Step 5: `proxy.ts` runtime export removed
+
+Step 5 added `export const runtime = "nodejs"` to `proxy.ts` framed as "explicit documentation". The smoke test for Step 6 caught Next.js 16 actively rejecting it:
+
+```
+⨯ Route segment config is not allowed in Proxy file at "./proxy.ts". Proxy always runs on Node.js runtime.
+```
+
+The proxy is always Node.js in Next.js 16 — there is no separate Edge variant for proxy files (unlike Next.js 15's `middleware.ts`, which defaulted to Edge and required an explicit Node.js opt-in). The export is now removed; `proxy.ts` is a single line. Updated `docs/services/nextauth.md` and `docs/decisions/ADR-0007.md` to match.
+
+#### Pending — OAuth credentials
+
+`AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET` are still empty in `.env.local`. The page renders fine and the buttons display correctly, but clicking either provider will fail at Auth.js's "no client_id configured" check until those are populated. Once filled in, the full sign-in / sign-out flow works end-to-end against the local dev server.
+
+#### Verified
+
+- `pnpm typecheck` → zero errors
+- `pnpm dev` → Ready in 383ms; `GET /` returns HTTP 200 with the expected signed-out copy ("Lifestack", "Sign in to continue", "Continue with Google", "Continue with GitHub")
+- Dev server log clean after the `proxy.ts` correction — no warnings, no errors
+
+#### Phase 1 done
+
+Working local dev loop end-to-end:
+- Next.js 16 dev server with Turbopack
+- Postgres 16 in Docker, healthy and persistent across restarts
+- Prisma 6 schema with the four Auth.js models, first migration applied
+- Auth.js v5 with Google + GitHub providers wired in, Prisma-backed sessions
+- Home page that branches on auth state, signed-in showing avatar + name
+
+Phase 2 (infrastructure baseline — Terraform modules, Azure deploy, Front Door, etc.) is the next chunk of work and has not been started.
