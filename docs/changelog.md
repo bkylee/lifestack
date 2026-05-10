@@ -369,7 +369,7 @@ Following the Microsoft Cloud Adoption Framework abbreviations. Documented in fu
 ---
 
 ### Step 2.2.1 — Subscription budget (cost guardrail)
-*Commit: `TBD`*
+*Commit: `07012b5`*
 
 #### What was created
 
