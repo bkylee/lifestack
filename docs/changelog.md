@@ -125,3 +125,39 @@ docker compose exec postgres psql -U lifestack -d lifestack  # Open psql shell
 #### Verified
 - `docker compose ps` → `(healthy)`, port `0.0.0.0:5432->5432/tcp`
 - `pg_isready -U lifestack -d lifestack` → accepting connections
+
+---
+
+### Step 4 — Prisma 6, schema, first migration, db singleton
+*Commit: `TBD`*
+
+#### Version decision: Prisma 6, not 7
+
+Prisma 7 (the latest) was initially installed, but it made a breaking architectural change: the `url` field was removed from the `datasource` block in `schema.prisma`. Prisma 7 requires a new `prisma.config.ts` driver pattern that is not yet documented in combination with Auth.js v5. We downgraded to Prisma 6 — the stable, well-documented version that all Auth.js adapter examples target. The pnpm install output will suggest upgrading to v7; ignore it until Auth.js explicitly confirms compatibility. See ADR-0002.
+
+#### The env file problem (and how we solved it)
+
+Prisma CLI reads `.env` by default, not `.env.local`. Prisma 6 had a `--env-file` flag; Prisma 7 removed it. Rather than duplicate `DATABASE_URL` into both `.env` and `.env.local`, all `db:*` scripts in `package.json` are prefixed with `dotenv -e .env.local --`, which loads the right file before passing control to Prisma. Single source of truth for the variable, no duplication.
+
+#### What was created
+
+**`prisma/schema.prisma`** — the four models Auth.js v5 requires: `User`, `Account`, `Session`, `VerificationToken`. Field names match exactly what `@auth/prisma-adapter` expects — the adapter reads these model names and field names directly when making queries.
+
+Added to the adapter's baseline schema per CLAUDE.md conventions:
+- `@default(cuid())` on User.id — CUID strings instead of auto-increment. CUIDs are collision-resistant and don't expose row counts.
+- `createdAt` / `updatedAt` on User, Account, Session — `@updatedAt` tells Prisma to set this automatically on every write.
+- `@@index([userId])` on Account and Session — CLAUDE.md requires an index on every FK column. Prisma doesn't add these automatically.
+- `onDelete: Cascade` on Account and Session — deleting a User cleans up their sessions and OAuth tokens automatically.
+
+Skipped: the `Authenticator` model (WebAuthn/passkeys). Not used in v1 — Google + GitHub OAuth only.
+
+**`prisma/migrations/20260510065410_init/migration.sql`** — the SQL Prisma generated from the schema. Four `CREATE TABLE` statements, indexes, and foreign key constraints. This file is committed to git — it's the authoritative record of what the database looks like. Never edit it by hand.
+
+**`lib/db.ts`** — the Prisma client singleton. The `global` trick stores the client on Node's global object in development so Next.js hot reloads reuse the same database connection pool instead of creating a new one on every file change. In production the module is only loaded once, so the trick is harmless.
+
+**`pnpm-workspace.yaml`** — approved build scripts for `@prisma/engines`, `prisma`, and `@prisma/client`. These packages compile native binaries for query execution; they're safe and required.
+
+#### Verified
+- `pnpm db:migrate --name init` → migration `20260510065410_init` created and applied
+- Tables confirmed in Postgres: `User`, `Account`, `Session`, `VerificationToken`
+- `pnpm typecheck` → zero errors
