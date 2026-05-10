@@ -86,7 +86,7 @@ This was the second time the same pnpm 11 security model blocked native build sc
 ---
 
 ### Step 3 — Docker Compose, Postgres 16, local database
-*Commit: `TBD`*
+*Commit: `7d62531`*
 
 #### What was created
 
