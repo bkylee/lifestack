@@ -410,7 +410,7 @@ This is also the **first real Terraform apply** in the project — exercises the
 ---
 
 ### Step 2.3 — Network module: VNet, subnets, NSGs, private DNS zones
-*Commit: `TBD`*
+*Commit: `1da8c49`*
 
 #### What was created
 
