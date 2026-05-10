@@ -201,7 +201,7 @@ Every subsequent request: `proxy.ts` calls `auth()` → Prisma looks up the sess
 ---
 
 ### Step 6 — Auth-aware home page, sign-in / sign-out, Phase 1 complete
-*Commit: TBD*
+*Commit: `b363e6e`*
 
 #### What was created
 
