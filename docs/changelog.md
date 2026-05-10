@@ -270,7 +270,7 @@ Phase 2 (infrastructure baseline — Terraform modules, Azure deploy, Front Door
 Each sub-step provisions one slice of the architecture and ships with a corresponding service doc and ADR (where the decision is non-obvious). v1 deploys only the prod environment; dev and staging are structured into the Terraform layout but not provisioned.
 
 ### Step 2.1 — Subscription, provider registration
-*Commit: `TBD`*
+*Commit: `910f581`*
 
 #### Why a dedicated subscription
 
@@ -312,7 +312,7 @@ Azure resource providers must be registered in a subscription before you can cre
 ---
 
 ### Step 2.2 — Terraform state backend, `infra/` skeleton
-*Commit: `TBD`*
+*Commit: `910f581`*
 
 #### What was created
 
