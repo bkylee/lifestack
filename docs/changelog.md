@@ -129,7 +129,7 @@ docker compose exec postgres psql -U lifestack -d lifestack  # Open psql shell
 ---
 
 ### Step 4 — Prisma 6, schema, first migration, db singleton
-*Commit: `TBD`*
+*Commit: `22e28c6`*
 
 #### Version decision: Prisma 6, not 7
 
