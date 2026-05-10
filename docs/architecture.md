@@ -6,9 +6,9 @@
 
 ## High-level architecture diagram
 
-### Current state (Phase 1 complete + Phase 2 steps 2.1–2.2)
+### Current state (Phase 1 complete + Phase 2 steps 2.1–2.3)
 
-The application runs entirely on the developer's WSL2 machine. The only Azure footprint is the Terraform state backend.
+The running application is still local; the Azure footprint now includes the network plumbing that downstream tiers will plug into. No app, data, or observability resources are provisioned yet — those come in Steps 2.4–2.10.
 
 ```mermaid
 flowchart TB
@@ -28,17 +28,26 @@ flowchart TB
   Next <-.->|server-side token exchange| Google
   Next <-.->|server-side token exchange| GitHub
 
-  subgraph AzureSub["Azure subscription: Lifestack"]
-    subgraph TfRG["rg-lifestack-tfstate (East US)"]
-      SA["Storage Account<br/>stlifestack9k3l<br/>HTTPS · TLS1.2 · AAD-only"]
-      Cont["Container: tfstate"]
-      Blob["prod.tfstate"]
-      SA --> Cont --> Blob
+  subgraph AzureSub["Azure subscription: Lifestack — East US"]
+    direction TB
+    subgraph TfRG["rg-lifestack-tfstate"]
+      SA["State SA<br/>stlifestack9k3l"]
     end
+    subgraph NetRG["rg-lifestack-network-prod"]
+      VNet["VNet vnet-lifestack-prod · 10.10.0.0/16<br/>3 subnets (aca /23, pg /24, pe /27)<br/>3 NSGs (placeholder defaults)<br/>4 private DNS zones, all linked"]
+    end
+    subgraph DataRG["rg-lifestack-data-prod (empty)"]
+    end
+    subgraph AppRG["rg-lifestack-app-prod (empty)"]
+    end
+    subgraph ObsRG["rg-lifestack-observability-prod (empty)"]
+    end
+    Budget(("$100/mo budget<br/>alert at 80% / 100% / 100%-forecast"))
   end
 
   TfCLI["Terraform CLI<br/>(developer machine)"]
   TfCLI <-->|AAD auth via az login| SA
+  TfCLI -->|terraform apply| NetRG
 ```
 
 ### Target state (end of Phase 2 — v1 prod)
@@ -225,8 +234,9 @@ Server actions bypass Front Door's CDN (POST requests are not cached). They run 
 | Layer | Current (mid Phase 2) | Target (end of Phase 2) |
 |---|---|---|
 | Subscription | `Lifestack` provisioned, 9 resource providers registered (Step 2.1) | unchanged |
-| IaC | Terraform state backend bootstrapped; `infra/environments/prod/` skeleton with empty plan green (Step 2.2) | All v1 resources defined as Terraform modules and applied to prod |
-| Network | None | VNet `10.10.0.0/16` with 3 delegated/restricted subnets and 4 private DNS zones (Step 2.3) |
+| Cost guardrail | $100/month subscription budget with alerts at 80/100% actual + 100% forecast (Step 2.2.1) | unchanged |
+| IaC | Terraform state backend + prod env skeleton + 4 prod RGs + budget resource — first apply succeeded (Step 2.2 → 2.3) | All v1 resources defined as Terraform modules and applied to prod |
+| Network | VNet `10.10.0.0/16` in `rg-lifestack-network-prod` with 3 delegated/restricted subnets and 4 linked private DNS zones (Step 2.3) | Same — downstream modules wire private endpoints into `snet-pe-prod` |
 | App | Running locally via `pnpm dev` | Containerized, deployed to Container Apps with workload profiles + scale-to-zero |
 | Database | Docker Postgres on localhost | Azure Postgres Flex B1ms reached via private endpoint |
 | Storage | Not configured | Blob Storage with private endpoint, separate containers for image sizes |
@@ -241,4 +251,26 @@ Each row moves from Current to Target as the corresponding Phase 2 sub-step comp
 
 ## Network topology
 
-A detailed VNet/subnet/DNS-zone diagram will be added with **Step 2.3 (network module)**. The high-level target diagram above already shows the VNet sitting in `rg-lifestack-network-prod` with three subnets (`snet-aca-prod`, `snet-pg-prod`, `snet-pe-prod`) and four privatelink DNS zones; the detailed view will add address ranges, delegations, NSG rules, and the per-resource Private Endpoint mapping.
+The VNet is the private-network boundary for the v1 architecture. Three subnets serve different purposes (compute, database, private endpoints) and have different posture (delegations, NSGs, PE-network-policies). Four private DNS zones, all linked to the VNet, make `*.privatelink.*` lookups resolve to the right private IPs as PEs come online in Steps 2.4–2.8.
+
+```mermaid
+flowchart TB
+  subgraph NetRG["rg-lifestack-network-prod"]
+    direction TB
+    subgraph VNet["vnet-lifestack-prod &nbsp;·&nbsp; 10.10.0.0/16"]
+      direction LR
+      Aca["snet-aca-prod<br/>10.10.0.0/23<br/>delegation: Microsoft.App/environments<br/>NSG: nsg-aca-prod (default rules)"]
+      Pg["snet-pg-prod<br/>10.10.2.0/24<br/>delegation: Microsoft.DBforPostgreSQL/flexibleServers<br/>NSG: nsg-pg-prod (default rules)"]
+      Pe["snet-pe-prod<br/>10.10.3.0/27<br/>private_endpoint_network_policies = Disabled<br/>NSG: nsg-pe-prod (default rules)"]
+    end
+
+    subgraph DNS["Private DNS zones (each linked to VNet)"]
+      Z1["privatelink.postgres.database.azure.com<br/>→ Postgres Flex (Step 2.4)"]
+      Z2["privatelink.azurecr.io<br/>→ ACR (Step 2.5)"]
+      Z3["privatelink.blob.core.windows.net<br/>→ Blob Storage (Step 2.7)"]
+      Z4["privatelink.vaultcore.azure.net<br/>→ Key Vault (Step 2.8)"]
+    end
+  end
+```
+
+Subnet sizing rationale, address-space choice, and the NSG strategy are explained in `docs/services/azure-network.md`. The Private Endpoint NICs that consume the four DNS zones land in `snet-pe-prod` as each downstream module is deployed.

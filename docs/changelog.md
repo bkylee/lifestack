@@ -407,3 +407,85 @@ This is also the **first real Terraform apply** in the project — exercises the
 - Budget itself: free
 - Updated subscription cost so far: ~$0.02/month (still just the state SA)
 
+---
+
+### Step 2.3 — Network module: VNet, subnets, NSGs, private DNS zones
+*Commit: `TBD`*
+
+#### What was created
+
+23 resources, all in `eastus`. First reusable Terraform module for the project.
+
+**Four prod resource groups** (split-tier strategy chosen in the cost discussion):
+
+| RG | Purpose |
+|---|---|
+| `rg-lifestack-network-prod` | VNet, subnets, NSGs, private DNS zones |
+| `rg-lifestack-data-prod` | (empty) — Postgres, Blob, Key Vault land here in 2.4–2.8 |
+| `rg-lifestack-app-prod` | (empty) — ACA env, ACA app, ACR land here in 2.5–2.6 |
+| `rg-lifestack-observability-prod` | (empty) — Log Analytics, App Insights land here in 2.9 |
+
+A fifth RG (`rg-lifestack-tfstate`) lives outside the Terraform-managed estate by design.
+
+**Network module (`infra/modules/network/`):**
+
+- VNet `vnet-lifestack-prod` · `10.10.0.0/16`
+- 3 subnets:
+  - `snet-aca-prod` · `10.10.0.0/23` · delegated to `Microsoft.App/environments` (workload profiles min size)
+  - `snet-pg-prod` · `10.10.2.0/24` · delegated to `Microsoft.DBforPostgreSQL/flexibleServers`
+  - `snet-pe-prod` · `10.10.3.0/27` · `private_endpoint_network_policies = Disabled` (Azure requirement for PE NICs)
+- 3 NSGs (`nsg-aca-prod`, `nsg-pg-prod`, `nsg-pe-prod`) attached to their respective subnets — placeholders with default Azure rules only
+- 4 private DNS zones, each linked to the VNet:
+  - `privatelink.postgres.database.azure.com`
+  - `privatelink.azurecr.io`
+  - `privatelink.blob.core.windows.net`
+  - `privatelink.vaultcore.azure.net`
+
+**Env-level additions (`infra/environments/prod/`):**
+
+- `random_string.suffix` — 4-char lowercase alphanumeric, persisted in state, used wherever a globally-unique resource name is required (storage accounts, ACR, Key Vault, Front Door endpoints). Resolved value: `21gg`.
+- `locals.tf` — naming convention realized as a typed local map; the network module receives ready-made names rather than reconstructing them
+- `outputs.tf` — surfaces the four RG names, the suffix, vnet ID, subnet IDs, and DNS zone IDs for ad-hoc lookup and downstream module consumption
+
+#### Why placeholder NSGs
+
+Each subnet has an NSG attached, but with no custom rules — only Azure's defaults apply. The reasoning:
+
+- NSG-per-subnet is the BP pattern.
+- Adding the NSG resource now means later steps (when ACA needs explicit outbound allows, etc.) just add rules — no "now I have to also create the NSG" detour.
+- Defaults are safe for an empty subnet: cross-VNet traffic allowed, Azure load balancer health probes allowed, all other inbound denied; outbound permits VNet and internet by default.
+
+The ACA NSG specifically will need explicit outbound allows for workload-profiles control-plane traffic (MCR, AzureFrontDoor.FirstParty, etc.) — added in Step 2.6 with the ACA env.
+
+#### Why all four DNS zones up front
+
+The alternative was creating each privatelink zone in the consuming module (Postgres zone in 2.4, ACR zone in 2.5, etc.) — every later step would have to touch the network module to link a zone to the VNet. Batching all four in 2.3:
+
+- Zones are free (first 25 per subscription)
+- Network module owns network resources cleanly — no later "the network module is now incomplete" surprises
+- Each subsequent step just creates its PE and registers an A record, no zone wrangling
+
+#### First terraform apply that creates infrastructure end-to-end
+
+Step 2.2.1 (the budget) was a single subscription-scoped resource. This is the first multi-resource, multi-RG apply that exercises:
+
+- The naming convention end to end
+- Module composition (env config consumes a module)
+- `for_each` over a map (the four DNS zones)
+- Cross-resource references (subnet → NSG association → NSG)
+- AAD-authenticated state writeback after a substantial diff
+
+Apply duration: well under a minute for 23 resources.
+
+#### Verified
+
+- `terraform plan` → "23 to add, 0 to change, 0 to destroy"
+- `terraform apply` → all 23 resources created
+- `az group list` → 5 RGs (4 prod + 1 tfstate), all `Succeeded`
+- `az network vnet show` → 3 subnets with correct prefixes and delegations (`Microsoft.App/environments`, `Microsoft.DBforPostgreSQL/flexibleServers`, none for PE)
+- `az network private-dns zone list` → 4 zones, each with `numberOfVirtualNetworkLinks: 1`
+
+#### Cost
+- Network module itself: $0/month (everything in v1's network is free at this scale)
+- Updated subscription cost so far: ~$0.02/month (still just the state SA)
+
