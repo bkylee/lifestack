@@ -366,3 +366,44 @@ Following the Microsoft Cloud Adoption Framework abbreviations. Documented in fu
 - State SA (Standard_LRS, KB-sized state files): ~$0.02/month
 - No app-side resources provisioned yet
 
+---
+
+### Step 2.2.1 — Subscription budget (cost guardrail)
+*Commit: `TBD`*
+
+#### What was created
+
+A `$100/month` subscription-scoped budget (`lifestack-monthly`) with three alert thresholds:
+
+| Threshold | Trigger | Why |
+|---|---|---|
+| 80% actual ($80) | `GreaterThan` | Yellow flag — getting close, intervene if trend continues |
+| 100% actual ($100) | `GreaterThanOrEqualTo` | Already over — escalate |
+| 100% forecasted | `GreaterThan` | Mid-month projection-based — fires earlier than actual when trajectory is bad, gives time to adjust before overrun |
+
+All three notify `brian.ky.lee@outlook.com`. Time period: 2026-05-01 to 2030-05-01.
+
+#### Important: budgets alert, they don't cap
+
+Azure pay-as-you-go has no built-in "stop everything when threshold hit" feature — that exists only on free trial / MSDN / sponsorship subscriptions. For a hard cap, you'd need a custom Action Group plus Automation runbook to deallocate or stop resources when the alert fires. v1 stays alert-only; manual intervention is acceptable for a personally-monitored project. Documented as a deferred hardening item.
+
+#### Why Terraform (not `az` CLI)
+
+The state backend was bootstrapped via `az` CLI because of the Terraform chicken-and-egg. The budget has no such constraint — it's a normal subscription resource that fits cleanly into the Terraform-managed estate. Defining it via the `azurerm_consumption_budget_subscription` resource means:
+
+- Future budget-threshold tweaks are PR-reviewable diffs
+- The budget is recreated automatically if anyone deletes it via portal
+- Naming/tagging stays consistent with the rest of the IaC
+
+This is also the **first real Terraform apply** in the project — exercises the full IaC pipeline end-to-end: AzureRM provider auth via `az login`, state backend reads/writes via AAD, ARM API resource creation, state writeback to the backend SA. Everything green in 5 seconds.
+
+#### Verified
+
+- `terraform plan` → "1 to add, 0 to change, 0 to destroy"
+- `terraform apply` → resource created in 5s, state writeback succeeded
+- `az consumption budget list --query "[?name=='lifestack-monthly']"` → returns the budget with all three notifications populated, `currentSpend: $0.00`
+
+#### Cost
+- Budget itself: free
+- Updated subscription cost so far: ~$0.02/month (still just the state SA)
+
