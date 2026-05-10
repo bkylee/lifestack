@@ -161,3 +161,39 @@ Skipped: the `Authenticator` model (WebAuthn/passkeys). Not used in v1 — Googl
 - `pnpm db:migrate --name init` → migration `20260510065410_init` created and applied
 - Tables confirmed in Postgres: `User`, `Account`, `Session`, `VerificationToken`
 - `pnpm typecheck` → zero errors
+
+---
+
+### Step 5 — Auth.js v5, Google + GitHub OAuth, Prisma-backed sessions
+*Commit: `TBD`*
+
+#### What was created
+
+**`lib/auth.ts`** — the entire Auth.js configuration in 10 lines. `NextAuth()` returns four exports: `handlers` (the GET/POST route handlers), `auth` (reads the current session anywhere — server components, server actions, proxy), `signIn` and `signOut` (server actions to start/end sessions). The Prisma adapter is wired in so OAuth accounts and sessions are stored in Postgres. Google and GitHub are the only providers.
+
+**`app/api/auth/[...nextauth]/route.ts`** — two lines. The `[...nextauth]` catch-all dynamic route matches every path under `/api/auth/`: `/api/auth/callback/google`, `/api/auth/callback/github`, `/api/auth/signin`, `/api/auth/signout`, and others. Auth.js handles all of them internally via the `handlers` export. We never write logic here.
+
+**`proxy.ts`** — Next.js 16's renamed `middleware.ts`. Exporting `auth as proxy` makes Auth.js check for a valid session on every request and handle unauthenticated redirects. The explicit `runtime = "nodejs"` is necessary: the Prisma adapter opens database connections, which requires Node.js — the Edge runtime cannot do this. Earlier research flagged that Next.js 16 moved the proxy to Node.js runtime by default, but the explicit declaration is documentation.
+
+**`.env.local`** — added `AUTH_SECRET` (generated with `openssl rand -base64 32`) and placeholders for `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`. Auth.js v5 auto-detects the `AUTH_{PROVIDER}_{ID|SECRET}` naming convention.
+
+**`.env.example`** — corrected the OAuth variable names from the v4 convention (`GOOGLE_CLIENT_ID`) to the v5 convention (`AUTH_GOOGLE_ID`). These are different and Auth.js v5 will not pick up the old names.
+
+#### No split config needed
+
+Earlier research flagged a potential split config requirement: in Next.js pre-16, middleware ran on the Edge runtime which can't hit a database, so session checking in middleware required JWT (not database sessions). In Next.js 16, the proxy runs on Node.js runtime, so the Prisma adapter works there directly. Single config, database sessions throughout. No JWT workaround needed.
+
+#### How the OAuth flow works
+
+1. User clicks "Sign in with Google" → our app calls `signIn("google")` → Next.js redirects to Google's authorization URL with a `state` parameter (CSRF protection)
+2. User authenticates on Google → Google redirects to `/api/auth/callback/google?code=...&state=...`
+3. Auth.js validates the `state`, exchanges the `code` for tokens, fetches the user profile from Google
+4. Auth.js upserts a `User` row (matched by email) and an `Account` row (the OAuth link)
+5. Auth.js creates a `Session` row in Postgres, sets a session cookie
+6. User is redirected to the app, now authenticated
+
+Every subsequent request: `proxy.ts` calls `auth()` → Prisma looks up the session token → returns the session or null.
+
+#### Verified
+- `pnpm typecheck` → zero errors
+- All four files created: `lib/auth.ts`, `app/api/auth/[...nextauth]/route.ts`, `proxy.ts`, `.env.local` updated
