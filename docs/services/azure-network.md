@@ -12,7 +12,7 @@ The VNet is the private network boundary for the Lifestack v1 architecture. Subn
 
 ## How it's configured here
 
-**VNet:** `vnet-lifestack-prod`, address space `10.10.0.0/16`, region `eastus`, in `rg-lifestack-network-prod`.
+**VNet:** `vnet-lifestack-prod`, address space `10.10.0.0/16`, region `eastus2`, in `rg-lifestack-network-prod`.
 
 **Subnets:**
 

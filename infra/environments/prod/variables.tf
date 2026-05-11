@@ -5,8 +5,8 @@ variable "subscription_id" {
 
 variable "location" {
   type        = string
-  default     = "eastus"
-  description = "Primary Azure region for all v1 resources."
+  default     = "eastus2"
+  description = "Primary Azure region for all v1 resources. eastus2 chosen over eastus because eastus is at capacity for Postgres Flex on PAYG subscriptions (LocationIsOfferRestricted)."
 }
 
 variable "environment" {

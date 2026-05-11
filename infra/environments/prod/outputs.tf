@@ -26,3 +26,32 @@ output "private_dns_zone_ids" {
   value       = module.network.private_dns_zone_ids
   description = "Private DNS zone IDs keyed by short alias (postgres/acr/blob/kv)."
 }
+
+# --- Postgres ---
+
+output "postgres_fqdn" {
+  value       = module.postgres.fqdn
+  description = "Postgres server FQDN. Resolves to private IP inside the VNet."
+}
+
+output "postgres_database_name" {
+  value       = module.postgres.database_name
+  description = "Application database name on the Postgres server."
+}
+
+output "postgres_admin_username" {
+  value       = module.postgres.admin_username
+  description = "Postgres admin username."
+}
+
+output "postgres_admin_password" {
+  value       = module.postgres.admin_password
+  sensitive   = true
+  description = "Postgres admin password. Retrieve with `terraform output -raw postgres_admin_password`. Will be migrated to Key Vault in a later step."
+}
+
+output "postgres_connection_string" {
+  value       = module.postgres.connection_string
+  sensitive   = true
+  description = "Full postgresql:// connection string. Retrieve with `terraform output -raw postgres_connection_string`."
+}
