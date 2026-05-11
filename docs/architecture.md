@@ -6,9 +6,9 @@
 
 ## High-level architecture diagram
 
-### Current state (Phase 1 complete + Phase 2 steps 2.1–2.4)
+### Current state (Phase 1 complete + Phase 2 steps 2.1–2.5)
 
-The running application is still local; the Azure footprint now includes the network plumbing and the Postgres Flex server. The app still talks to local Docker Postgres in development — the Azure database stays unreached until Container Apps lands in Step 2.6. No app, storage, secrets, or observability resources are provisioned yet — those come in Steps 2.5–2.10.
+The running application is still local; the Azure footprint now includes the network plumbing, the Postgres Flex server, and the container registry. No images have been pushed yet — the registry is empty until CI/CD lands in Step 2.6. No app, storage, secrets, or observability resources are provisioned yet — those come in Steps 2.6–2.10.
 
 ```mermaid
 flowchart TB
@@ -39,7 +39,8 @@ flowchart TB
     subgraph DataRG["rg-lifestack-data-prod"]
       Pg2[("Postgres Flex B1ms<br/>psql-lifestack-prod<br/>private IP 10.10.2.4<br/>public access disabled")]
     end
-    subgraph AppRG["rg-lifestack-app-prod (empty)"]
+    subgraph AppRG["rg-lifestack-app-prod"]
+      ACR2["ACR Basic<br/>crlifestackehyp.azurecr.io<br/>admin disabled · public endpoint<br/>(empty — no images yet)"]
     end
     subgraph ObsRG["rg-lifestack-observability-prod (empty)"]
     end
@@ -50,6 +51,7 @@ flowchart TB
   TfCLI <-->|AAD auth via az login| SA
   TfCLI -->|terraform apply| NetRG
   TfCLI -->|terraform apply| DataRG
+  TfCLI -->|terraform apply| AppRG
   Pg2 -.->|delegated NIC| VNet
 ```
 
@@ -73,7 +75,7 @@ flowchart TB
     subgraph AppRG["rg-lifestack-app-prod"]
       ACAEnv["ACA env<br/>cae-lifestack-prod<br/>(workload profiles)"]
       ACAApp["ca-lifestack-web-prod<br/>Next.js container<br/>(scale-to-zero)"]
-      ACR["ACR Standard<br/>crlifestack...."]
+      ACR["ACR Basic<br/>crlifestackehyp"]
       ACAEnv --> ACAApp
       ACAApp -.->|pulls image| ACR
     end
@@ -238,10 +240,10 @@ Server actions bypass Front Door's CDN (POST requests are not cached). They run 
 |---|---|---|
 | Subscription | `Lifestack` provisioned, 9 resource providers registered (Step 2.1) | unchanged |
 | Cost guardrail | $100/month subscription budget with alerts at 80/100% actual + 100% forecast (Step 2.2.1) | unchanged |
-| IaC | Terraform state backend + prod env + 4 prod RGs + budget + network + Postgres modules applied (Step 2.2 → 2.4) | All v1 resources defined as Terraform modules and applied to prod |
+| IaC | Terraform state backend + prod env + 4 prod RGs + budget + network + Postgres + ACR modules applied (Step 2.2 → 2.5) | All v1 resources defined as Terraform modules and applied to prod |
 | Region | `eastus2` (originally `eastus` until `LocationIsOfferRestricted` on Postgres Flex forced a move in Step 2.4) | unchanged |
 | Network | VNet `10.10.0.0/16` in `rg-lifestack-network-prod` with 3 delegated/restricted subnets and 4 linked private DNS zones (Step 2.3) | Same — downstream modules wire private endpoints into `snet-pe-prod` |
-| App | Running locally via `pnpm dev` against Docker Postgres | Containerized, deployed to Container Apps with workload profiles + scale-to-zero, talking to Postgres Flex over the VNet |
+| App | Running locally via `pnpm dev` against Docker Postgres. ACR Basic provisioned in `rg-lifestack-app-prod` (`crlifestackehyp.azurecr.io`); empty until CI pushes the first image in Step 2.6. | Containerized, deployed to Container Apps with workload profiles + scale-to-zero, talking to Postgres Flex over the VNet |
 | Database | **Azure Postgres Flex B1ms** in `rg-lifestack-data-prod`, public access disabled, NIC at `10.10.2.4` in `snet-pg-prod`, `vector` extension allowlisted (Step 2.4). App still points at local Docker Postgres until Container Apps lands. | Same — Container Apps consumes the connection string from Key Vault |
 | Storage | Not configured | Blob Storage with private endpoint, separate containers for image sizes |
 | Edge | None | Front Door Standard with WAF |

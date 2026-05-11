@@ -567,3 +567,73 @@ This is a real production failure mode: half-applied Terraform from API flake. T
 - Backups (14-day): $0 (free up to provisioned storage size).
 - Subscription total so far: ~$17/month (Postgres) + ~$0.02 (state SA) + $0 (everything else still free at this scale) = **~$17/month idle**.
 
+---
+
+### Step 2.5 — Container Registry (ACR Basic)
+*Commit: TBD*
+
+#### What this step produced
+
+A reusable Terraform module at `infra/modules/acr/` that provisions an Azure Container Registry. Wired into the prod env via `acr.tf`. Three new outputs (`acr_id`, `acr_name`, `acr_login_server`) surface the registry's identifiers.
+
+The registry — `crlifestackehyp.azurecr.io` — lives in `rg-lifestack-app-prod`. It's empty: no images pushed yet. CI/CD in Step 2.6 will push the first Next.js image; Container Apps will pull from this registry on deploy.
+
+#### Decisions worth understanding
+
+**SKU = Basic.** ADR-0010 captures the trade in full. The short version: Premium ($50/mo) would unlock Private Endpoint, geo-replication, content trust, scope tokens, and retention policy. Basic ($5/mo) ships with none of those but keeps the v1 monthly cost under the $100 budget. Authentication posture is identical across tiers — admin user disabled, anonymous pulls disabled, every pull/push gated by AAD + RBAC. The defense-in-depth gap (public auth endpoint vs. PE-only) is the only meaningful difference.
+
+The `privatelink.azurecr.io` private DNS zone we deployed in Step 2.3 is dormant — kept linked to the VNet so a future Premium upgrade is one resource away (the Private Endpoint), with no name resolution work to redo.
+
+**Admin user disabled (`admin_enabled = false`).** ACR ships with an optional admin user that authenticates with a shared registry password. Disabling it forces every access through AAD identities. This is the modern best practice and is universally recommended; the admin user mainly exists for legacy compatibility with tools that don't know how to do AAD auth.
+
+**Anonymous pull disabled.** Default, but explicit. Every pull requires a valid AAD token. Without this, the registry could serve images to anonymous clients — useful for public OSS images, terrible for app images.
+
+**Public network access enabled.** Basic doesn't support Private Endpoint; this is the only mode available. AAD/RBAC is doing the work of access control. With Premium and a PE this would become `Disabled`, and the only path to the registry would be over the VNet.
+
+**Network rule bypass = `AzureServices` (default).** Mostly cosmetic on Basic — there are no network rules to bypass. Becomes meaningful on Premium with a PE: it lets trusted Azure services (Container Apps, ACR Tasks) reach the registry even when the network ruleset would otherwise block them.
+
+#### Naming gotcha
+
+ACR names must be **alphanumeric only** — no hyphens, no underscores, 5–50 characters. This is a registry-specific constraint different from the CAF `kind-app-env` pattern. The pattern landed on:
+
+```hcl
+name = "cr${var.project}${random_string.suffix.result}"
+# → crlifestackehyp
+```
+
+The suffix comes from the env's shared `random_string.suffix`, which regenerated during the Step 2.4 destroy-and-recreate cycle (from `21gg` to `ehyp`). The suffix exists for resources that must be globally unique within their Azure namespace (storage accounts, ACR, Key Vault, Front Door). Documented in `docs/services/terraform.md`.
+
+#### What's NOT in this step (and why)
+
+| Skipped | Reason |
+|---|---|
+| Private Endpoint | Basic SKU doesn't support it. Deferred under ADR-0010. |
+| Retention policy | Premium-only feature. Manual or scripted cleanup will live in CI/CD. |
+| Content trust / Notary signing | Premium-only. Not in v1 threat model. |
+| Scope tokens (per-repo RBAC) | Premium-only. Not needed for a single-repo registry. |
+| `AcrPull` role assignment for Container Apps managed identity | Container Apps' managed identity doesn't exist yet — created in Step 2.6 with the ACA env. The role assignment lives there. |
+
+#### Files
+
+- `infra/modules/acr/versions.tf` — provider pin (`azurerm ~> 4.0`).
+- `infra/modules/acr/variables.tf` — 5 inputs with name + SKU validators.
+- `infra/modules/acr/main.tf` — single `azurerm_container_registry` resource.
+- `infra/modules/acr/outputs.tf` — `id`, `name`, `login_server`.
+- `infra/environments/prod/acr.tf` — module invocation.
+- `infra/environments/prod/outputs.tf` — 3 new top-level outputs.
+- `docs/services/azure-container-registry.md` — full service reference.
+- `docs/decisions/ADR-0010.md` — Basic vs Premium decision.
+- `docs/architecture.md` — current-state diagram, current-vs-target table, target-state SKU label all updated.
+
+#### Verified
+
+- `terraform plan` → 1 to add, clean.
+- `terraform apply` → registry created in ~10 seconds.
+- `az acr show` → `provisioningState: Succeeded`, `sku: Basic`, `adminUserEnabled: false`, `anonymousPullEnabled: false`, `publicNetworkAccess: Enabled`, `loginServer: crlifestackehyp.azurecr.io`.
+- `az acr repository list` → `[]` (empty registry, as expected).
+
+#### Cost
+
+- ACR Basic: ~$5/month (fixed; storage included up to 10 GB).
+- Subscription total so far: ~$17 (Postgres) + ~$5 (ACR) + ~$0.02 (state SA) = **~$22/month idle**.
+

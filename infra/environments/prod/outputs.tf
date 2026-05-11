@@ -55,3 +55,20 @@ output "postgres_connection_string" {
   sensitive   = true
   description = "Full postgresql:// connection string. Retrieve with `terraform output -raw postgres_connection_string`."
 }
+
+# --- ACR ---
+
+output "acr_id" {
+  value       = module.acr.id
+  description = "Container Registry resource ID. Used when assigning AcrPull to managed identities."
+}
+
+output "acr_name" {
+  value       = module.acr.name
+  description = "Container Registry name (without .azurecr.io suffix)."
+}
+
+output "acr_login_server" {
+  value       = module.acr.login_server
+  description = "Container Registry FQDN. Image prefix for container references — e.g. <login_server>/lifestack-web:latest."
+}
