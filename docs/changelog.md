@@ -570,7 +570,7 @@ This is a real production failure mode: half-applied Terraform from API flake. T
 ---
 
 ### Step 2.5 — Container Registry (ACR Basic)
-*Commit: TBD*
+*Commit: `57b4427`*
 
 #### What this step produced
 
