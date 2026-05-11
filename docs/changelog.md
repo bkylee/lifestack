@@ -492,7 +492,7 @@ Apply duration: well under a minute for 23 resources.
 ---
 
 ### Step 2.4 — Postgres Flex module + region change from eastus to eastus2
-*Commit: TBD*
+*Commit: `d74330f`*
 
 #### What this step produced
 
