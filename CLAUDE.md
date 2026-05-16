@@ -24,7 +24,7 @@ Think Letterboxd, but unified across *all* a person's hobbies in one profile.
 
 **Module sequence:**
 
-1. Resource groups + naming/tagging + multi-env scaffolding (ADR-0005) ← in progress
+1. Resource groups + naming/tagging + multi-env scaffolding (ADR-0005) ← Steps 1 & 2 done; Step 3 (multi-env scaffolding) is next
 2. Network (VNet, subnets, NSGs, private DNS zones)
 3. Key Vault
 4. Log Analytics + Application Insights
@@ -571,4 +571,4 @@ Each step has both a code deliverable and a documentation deliverable. A phase i
 
 ---
 
-*Last updated: 2026-05-16 — added Current phase, Hands-on cadence for Phase 2, and Switching devices sections.*
+*Last updated: 2026-05-16 — Module 1 Steps 1 & 2 complete: locals.tf, resource_groups.tf, main.tf, variables.tf, terraform.tfvars written by Brian from scratch; four prod RGs applied and verified in Azure. Step 3 (multi-env dir scaffolding) is next.*

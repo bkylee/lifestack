@@ -25,7 +25,7 @@ locals {
   #
   # See mentor message for examples + recommendation.
   # ---------------------------------------------------------------------------
-  project = "<FILL IN>"
+  project = "lifestack"
 
   # ---------------------------------------------------------------------------
   # [D2] Environment label for THIS directory.
@@ -38,7 +38,7 @@ locals {
   # Azure has no preference. Whatever you pick, the dev/ and staging/ dirs
   # later will mirror it ("dev" vs "development", "staging" vs "stage").
   # ---------------------------------------------------------------------------
-  environment = "<FILL IN>"
+  environment = "prod"
 
   # ---------------------------------------------------------------------------
   # [D3] Azure region.
@@ -57,7 +57,7 @@ locals {
   #
   # See mentor message for recommendation.
   # ---------------------------------------------------------------------------
-  location = "<FILL IN>"
+  location = "eastus2"
 
   # ---------------------------------------------------------------------------
   # [D4] Base tags — applied to every resource we create in this env.
@@ -112,17 +112,12 @@ locals {
   # Pick ONE of the two patterns below and uncomment+fill it. Delete the other.
   # ---------------------------------------------------------------------------
 
-  # Flat option — single RG holds everything in this env.
-  # rg_names = {
-  #   all = "rg-${local.project}-${local.environment}"
-  # }
-
   # Split option — one RG per tier. Match the keys to the tiers you actually
   # plan to use. (Old first-pass used: network, data, app, observability.)
-  # rg_names = {
-  #   network       = "rg-${local.project}-network-${local.environment}"
-  #   data          = "rg-${local.project}-data-${local.environment}"
-  #   app           = "rg-${local.project}-app-${local.environment}"
-  #   observability = "rg-${local.project}-observability-${local.environment}"
-  # }
+  rg_names = {
+    network       = "rg-${local.project}-network-${local.environment}"
+    data          = "rg-${local.project}-data-${local.environment}"
+    app           = "rg-${local.project}-app-${local.environment}"
+    observability = "rg-${local.project}-observability-${local.environment}"
+  }
 }

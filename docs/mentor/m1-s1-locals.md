@@ -73,8 +73,8 @@ Just `locals.tf`. Five decisions [D1]–[D5]. Once those are in I review, then w
 
 _(Fill this in after you commit the values, so the file is a complete record of what was chosen and why. Format suggestion: bullet per decision with the picked value and a one-sentence reason — especially if you went against the recommendation.)_
 
-- [D1] _project = `…`_
-- [D2] _environment = `…`_
-- [D3] _location = `…`_
-- [D4] _base tags = `…`_
-- [D5] _RG strategy = `…`_
+- [D1] _project = `lifestac` Name of my current project_
+- [D2] _environment = `prod`_ Due to current scale of project, I don't think the costs and extra workload justify having separate environments for production and development, but am aware of the usecase of separate envs and will work on supplementing the project wiht that later.
+- [D3] _location = `eastus2` I know that eastus is a central AZ that is used for east coast. When I was working on this before, our postgres instance wasn't able to deploy on useast1
+- [D4] _base tags = ``_
+- [D5] _RG strategy = `split-architecture` For long-term growth and more practical learning, I've decided to follow the BP and recommendation of the mentor 
