@@ -18,6 +18,31 @@ Think Letterboxd, but unified across *all* a person's hobbies in one profile.
 
 ---
 
+## Current phase
+
+**Phase 2 — Infrastructure restart (as of 2026-05-13).** Phase 1 (foundations) complete. Phase 2 first pass was Claude-driven; deliberately torn down and restarted with hands-on cadence (see "Hands-on cadence" under "How to work with me"). 29 Phase 2 Azure resources destroyed; old code archived to `infra/.reference/` and `docs/.reference/`. State backend storage account `stlifestack9k3l` in `rg-lifestack-tfstate` survives.
+
+**Module sequence:**
+
+1. Resource groups + naming/tagging + multi-env scaffolding (ADR-0005) ← in progress
+2. Network (VNet, subnets, NSGs, private DNS zones)
+3. Key Vault
+4. Log Analytics + Application Insights
+5. Container Registry
+6. Postgres Flexible Server (with private endpoint)
+7. Container Apps + managed identity (ADR-0008)
+8. Front Door (ADR-0004)
+9. End-to-end smoke test
+
+Blob storage, CI/CD, app deploy deferred to Phase 3+.
+
+- Source-of-truth spec: `docs/superpowers/specs/2026-05-13-phase2-restart-design.md`
+- Mentor messages: `docs/mentor/`
+
+Update this section as modules complete.
+
+---
+
 ## Who I am
 
 IT infrastructure professional. Day job is operational — hardware design, deployment, support, IT admin. Career goal: cloud architect / IT infra architect.
@@ -50,6 +75,35 @@ So: don't explain *what* a VNet or a server component is. Do explain *how this p
 
 ---
 
+## Switching devices
+
+The repo (git) is the cross-device source of truth. Auto-memory at `~/.claude/projects/.../memory/` is local to each install and does NOT sync — this file (CLAUDE.md) carries the cross-device context, especially the "Current phase" section above.
+
+On a new device, before resuming work:
+
+```bash
+# 1. Pull latest project state — CLAUDE.md, docs/, code, infra
+git pull
+
+# 2. Verify auth on the toolchain
+gh auth status                # GitHub
+az account show               # Azure (run `az login` if not authed)
+
+# 3. Check terraform can read state
+cd infra/environments/prod
+terraform init                # picks up backend.tf
+terraform state list          # should match the live env
+
+# 4. Skim recent project state to catch up
+git log --oneline -20
+cat docs/changelog.md         # narrative record of what was built
+ls docs/mentor/               # latest mentor messages = where the cadence left off
+```
+
+The first Claude Code session on the new device will have empty auto-memory. That's expected — the "Current phase" section above + the mentor messages bring Claude up to speed. Memory will rebuild naturally as you work on that device.
+
+---
+
 ## Goals for this project (in priority order)
 
 1. **Learn the full stack deeply enough to defend it in architect interviews.** I want to understand what each service does, why we chose it over alternatives, how it's configured, and what its operational characteristics are. Every box in the architecture diagram should be one I can talk about for ten minutes from real experience.
@@ -67,6 +121,26 @@ So: don't explain *what* a VNet or a server component is. Do explain *how this p
 ## How to work with me
 
 This is the most important section. Re-read when in doubt.
+
+### Hands-on cadence for Phase 2 infra (effective 2026-05-13)
+
+**Brian drives configuration and decisions; Claude scaffolds and mentors.** This flips the prior "Claude builds, Brian reviews" model.
+
+Per-module loop:
+
+1. Claude scaffolds a `.tf` file with `[D#]` decision markers.
+2. Claude sends a mentor message (textbook line / production reality / recommended pick / what to do per decision).
+3. Brian fills in values.
+4. Claude reviews (sign off / push back / flag gaps).
+5. Brian runs `terraform fmt`, `plan`, `apply`.
+6. Brian drafts `docs/services/<thing>.md` + changelog entry; Claude edits line-by-line with reasoning.
+7. ADRs: same pattern — Brian drafts, Claude edits.
+
+Mentor messages persist to `docs/mentor/m{module}-s{step}-{topic}.md` for cross-session/cross-device reference. After deciding, Brian fills in the "Decisions Brian made" section at the bottom of each mentor file.
+
+**Why:** interview-defensibility — having *written* the docs and made the decisions, not just having read them.
+
+**What stays Claude-driven:** audit/inventory commands (`az ...`, `terraform state list`), file moves, repo plumbing. The line: **if the action embeds a decision, Brian makes it.**
 
 ### Pedagogical by default — for everything
 
@@ -497,4 +571,4 @@ Each step has both a code deliverable and a documentation deliverable. A phase i
 
 ---
 
-*Last updated: project init.*
+*Last updated: 2026-05-16 — added Current phase, Hands-on cadence for Phase 2, and Switching devices sections.*
