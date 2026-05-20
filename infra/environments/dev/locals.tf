@@ -2,7 +2,7 @@
 locals {
   project = "lifestack"
 
-  environment = "prod"
+  environment = "dev"
 
   location = "eastus2"
 

@@ -17,3 +17,5 @@ Service docs (`docs/services/*.md`) describe the system as it ended up. Mentor m
 
 ## Index
 - [m1-s1-locals.md](m1-s1-locals.md) — Module 1 Step 1: foundational locals (project name, env, region, tags, RG split)
+- [m1-s2-resource-groups.md](m1-s2-resource-groups.md) — Module 1 Step 2: resource groups (`for_each`, `features` block, provider config)
+- [m1-s3-multi-env-scaffolding.md](m1-s3-multi-env-scaffolding.md) — Module 1 Step 3: multi-environment directory scaffolding (DRY pattern, state keys, per-env variation)
