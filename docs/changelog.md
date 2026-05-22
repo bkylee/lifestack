@@ -637,3 +637,135 @@ The suffix comes from the env's shared `random_string.suffix`, which regenerated
 - ACR Basic: ~$5/month (fixed; storage included up to 10 GB).
 - Subscription total so far: ~$17 (Postgres) + ~$5 (ACR) + ~$0.02 (state SA) = **~$22/month idle**.
 
+---
+
+## Phase 2 — Infrastructure restart
+
+The Phase 2 first pass above (Steps 2.1–2.5) was Claude-driven. On 2026-05-13 it was deliberately torn down — 29 Azure resources destroyed, the old code archived to `infra/.reference/` and `docs/.reference/` — and restarted under a hands-on cadence: Brian drives configuration and decisions, Claude scaffolds and mentors. The state backend storage account `stlifestack9k3l` survived the teardown.
+
+The restart is organized into modules, each built in small steps. Entries below cover Module 1 — the prod foundation: locals, provider config, resource groups, and the multi-environment directory scaffolding. Steps 1 and 2 shipped in a single commit (`5852f75`); the per-step split follows the mentor messages in `docs/mentor/`.
+
+<!--
+  SKELETON — changelog entries for Module 1 Steps 1, 2, and 3.
+  Each "> **Fill in**" blockquote is a prompt. Replace it with prose, then delete
+  the blockquote. Delete this banner when all three are done, then hand back for
+  the edit pass. Format reference: the Step 2.x entries above; CLAUDE.md >
+  Documentation requirements covers what a changelog entry should contain.
+-->
+
+### Module 1, Step 1 — foundational locals
+*Commit: `5852f75`*
+
+#### What this step produced
+
+> **Fill in** — `infra/environments/prod/locals.tf`: the project-wide knobs every later
+> module reads — `project`, `environment`, `location`, `base_tags`, and the `rg_names`
+> map. No Terraform run, no Azure change — just the values. Why locals come first: every
+> module (`network`, `key_vault`, …) references `local.*`, and a bad call here (e.g. a
+> `project` name too long for Azure's 24-char storage-account name cap) is expensive to
+> undo later. Source: `docs/mentor/m1-s1-locals.md`.
+
+#### Naming and tagging decisions ([D1]–[D4])
+
+> **Fill in** — The four settled values and a one-line reason for each: [D1] `project`
+> (`lifestack` — short, lowercase, hyphen-free to stay inside Azure name-length budgets),
+> [D2] `environment` (`prod`), [D3] `location` (`eastus2` — newer hardware, real AZ
+> coverage; the first pass's `eastus` hit a Postgres SKU restriction), [D4] `base_tags`
+> (the three baseline tags — `project`, `environment`, `managed_by` — and why
+> `managed_by = terraform` is the portal-drift signal). Source: the "Decisions Brian
+> made" block in `m1-s1-locals.md`.
+
+#### The resource-group split ([D5])
+
+> **Fill in** — The architectural call of this step: four per-tier RGs
+> (`network` / `data` / `app` / `observability`) over a single flat RG. Why split —
+> mirrors team-by-tier RBAC, makes per-tier cost legible — and the friction it costs a
+> solo operator (more `for_each`, more outputs to plumb between modules). The
+> interview-defensibility framing from the mentor message. Source: `m1-s1-locals.md`
+> [D5].
+
+#### Verified
+
+> **Fill in** — How Step 1 was checked before moving on: `locals.tf` reviewed for
+> naming-collision risk; no `terraform plan` run yet (deliberate — typos are cheaper to
+> catch in review than in a plan call).
+
+#### Cost
+
+> **Fill in** — No Azure resources created; subscription cost unchanged.
+
+---
+
+### Module 1, Step 2 — provider config and resource groups
+*Commit: `5852f75`*
+
+#### What this step produced
+
+> **Fill in** — `main.tf` (the `azurerm` provider block + `features {}`), `variables.tf`
+> and `terraform.tfvars` (the `subscription_id` input and its value), and
+> `resource_groups.tf` (the four prod RGs). This is the step that put resource groups
+> back in the subscription after the teardown —
+> `rg-lifestack-{network,data,app,observability}-prod`. Source:
+> `docs/mentor/m1-s2-resource-groups.md`.
+
+#### The `for_each` pattern
+
+> **Fill in** — `resource_groups.tf` creates the four RGs by iterating `local.rg_names`
+> with `for_each` rather than four hard-coded blocks. `each.key` / `each.value`, and the
+> payoff: adding or removing a tier is a one-line change to the `rg_names` map, not a new
+> resource block. Each RG gets `local.location` and `local.base_tags`.
+
+#### The provider `features` block
+
+> **Fill in** — Why `main.tf` carries a `features {}` block even though it creates no
+> resource: it tunes azurerm's behaviour. The two non-default settings and what they do —
+> `resource_group.prevent_deletion_if_contains_resources = true` (destroy-typo guard) and
+> `key_vault.purge_soft_delete_on_destroy = false` (recoverability; relevant once Module
+> 3 adds Key Vault).
+
+#### variables.tf vs. terraform.tfvars
+
+> **Fill in** — The split: `variables.tf` declares the *shape* of an input
+> (`subscription_id`, typed `string`); `terraform.tfvars` supplies the *value*. Why the
+> subscription ID sits in a committed `.tfvars` (non-secret per Microsoft guidance) while
+> real secrets never would. Cross-reference `docs/services/terraform-file-layout.md`.
+
+#### Verified
+
+> **Fill in** — What `terraform fmt` / `plan` / `apply` showed, and the post-apply check
+> that the four prod RGs exist in Azure (`az group list`) with the expected names,
+> location, and tags.
+
+#### Cost
+
+> **Fill in** — Resource groups are free; subscription cost unchanged.
+
+---
+
+### Module 1, Step 3 — multi-environment directory scaffolding
+*Commit: `cf90dcb`*
+
+#### What this step produced
+
+> **Fill in** — `dev/` and `staging/` scaffolded as sibling Terraform roots to `prod/`, structured but not initialized. The three new docs: `infra/environments/README.md` (multi-env policy), `docs/services/terraform-file-layout.md` (per-file anatomy + shared-module refactor path), `docs/glossary.md`. Note nothing was applied to Azure — these directories are scaffold-only.
+
+#### The DRY decision — light duplication ([D1])
+
+> **Fill in** — Why light duplication was chosen over a shared root module and Terragrunt at this scale (~40 lines of HCL per env). The documented refactor trigger — Module 2 (network), ~80–150 lines per env → extract a shared module. Source: `docs/mentor/m1-s3-multi-env-scaffolding.md` and `infra/environments/README.md`.
+
+#### What varies per environment ([D2], [D3])
+
+> **Fill in** — The two-line per-env diff: `backend.tf` `key` (`prod`/`dev`/`staging.tfstate`) and `locals.tf` `environment`. Why state keys must be unique per env ([D2] — two directories sharing a key corrupt each other's state). What stays identical vs. varies ([D3]).
+
+#### locals.tf comment trim
+
+> **Fill in** — Step 1's `[D1]`–`[D5]` decision-time comments were removed from all three `locals.tf` now that the decisions are settled. They had gone stale — e.g. `dev/locals.tf` still claimed "this file lives under `environments/prod/`". Each file went from ~123 lines to ~21.
+
+#### Verified
+
+> **Fill in** — `terraform fmt` clean across `infra/environments`; `diff` confirms the three `locals.tf` are identical except the `environment` line; `dev/` and `staging/` deliberately not `terraform init`-ed (no `.terraform/`, no state).
+
+#### Cost
+
+> **Fill in** — No Azure resources created or changed; subscription cost unchanged.
+

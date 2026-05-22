@@ -24,7 +24,7 @@ Think Letterboxd, but unified across *all* a person's hobbies in one profile.
 
 **Module sequence:**
 
-1. Resource groups + naming/tagging + multi-env scaffolding (ADR-0005) ← Steps 1 & 2 done; Step 3 (multi-env scaffolding) is next
+1. Resource groups + naming/tagging + multi-env scaffolding (ADR-0005) ← Steps 1–3 done; Step 4 (ADR-0005 + `azure-resource-groups.md` service doc) in progress — see footer
 2. Network (VNet, subnets, NSGs, private DNS zones)
 3. Key Vault
 4. Log Analytics + Application Insights
@@ -571,4 +571,4 @@ Each step has both a code deliverable and a documentation deliverable. A phase i
 
 ---
 
-*Last updated: 2026-05-16 — Module 1 Steps 1 & 2 complete: locals.tf, resource_groups.tf, main.tf, variables.tf, terraform.tfvars written by Brian from scratch; four prod RGs applied and verified in Azure. Step 3 (multi-env dir scaffolding) is next.*
+*Last updated: 2026-05-21 — Module 1 Step 4 in progress. `docs/services/azure-resource-groups.md`: 6 of 8 sections drafted (Gotchas and Cost characteristics still skeleton); the drafted sections still need the line-by-line edit pass and removal of leftover `> **Fill in**` prompt remnants. `docs/changelog.md` has skeleton entries for Module 1 Steps 1–3 awaiting fill. Remaining for Step 4: finish + edit the service doc, fill the 3 changelog entries, write ADR-0005.*
