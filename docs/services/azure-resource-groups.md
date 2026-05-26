@@ -2,13 +2,10 @@
 
 ## What it is
 
-> **Fill in** — One paragraph. Define an Azure Resource Group: a logical container / management boundary for resources, not a runtime construct. Cover that every Azure resource belongs to exactly one RG; that the RG itself has a region (metadata about where the RG's own record lives) which is independent of where the resources inside it run; and that an RG is simultaneously a lifecycle, RBAC, and billing boundary. Say where RGs sit in our stack — the foundation layer: Module 1 creates them and nothing else, Modules 2+ fill them.
-
 Resource groups are logical containment of Azure resources. RG groups have meta data and can be used to lifecycle the collective resources together. We created them in module 1 and filled with Module 2 onward. 
 
 ## Why we use it
 
-> **Fill in** — Why we deliberately split into **four** tier RGs (`network`, `data`, `app`, `observability`) rather than one flat RG. This is decision [D5] in `docs/mentor/m1-s1-locals.md`. The three reasons from that mentor message: (a) tier-level RBAC mirrors how real orgs scope access (DBAs → data RG, network team → network RG); (b) cost reporting rolls up per tier; (c) blast-radius isolation — destroy/recreate one tier without touching others. Be honest about the solo-project tension: you are every "team," so the RBAC benefit is latent, not active — frame it as structuring now for a story you can defend later.
 We wanted to split up our resources into 4 groups based on function. Having tiers reflects RBAC (resource groups for specific teams), costs separated per tier, blast-radius isolation (easily destroy/ redeploy resources without touching all resources.). I want to replicate a production environment wherever possible as this is a project focused on learning rather than on full efficiency. 
 
 
@@ -80,16 +77,11 @@ terraform destroy -target='azurerm_resource_group.rg_names["app"]'
 
 ## Gotchas
 
-> **Fill in** — The non-obvious things:
-> - `prevent_deletion_if_contains_resources = true` makes Terraform refuse to delete a non-empty RG — flip the flag first to intentionally tear one down.
-> - Renaming a `for_each` map key (e.g. `observability` → `monitoring`) destroys and recreates that RG, because the key is its state identity.
-> - Deleting an RG is an irreversible cascade — everything inside goes with it.
-> - An RG's `location` is metadata only; resources inside can sit in other regions (we keep everything in `eastus2` regardless).
-> - RG names must be unique within the subscription, not globally.
+Resource Groups's 'location' is only metadata. Resources in the RG can be deployed in other regions 
 
 ## Cost characteristics
 
-> **Fill in** — Short. Resource groups themselves are **free** — $0 on the bill. The four-way split exists for cost *attribution* (per-tier rollup in Azure Cost Management), not cost reduction. Note where you'd view per-RG spend (Cost Management → group/filter by resource group). The real cost story belongs to what the RGs contain — documented per-service from Module 2 on.
+RGs are free. We use them to split costs.
 
 ## Authoritative docs
 
