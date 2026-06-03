@@ -24,8 +24,8 @@ Think Letterboxd, but unified across *all* a person's hobbies in one profile.
 
 **Module sequence:**
 
-1. Resource groups + naming/tagging + multi-env scaffolding (ADR-0005) ← Steps 1–3 done; Step 4 (ADR-0005 + `azure-resource-groups.md` service doc) in progress — see footer
-2. Network (VNet, subnets, NSGs, private DNS zones)
+1. Resource groups + naming/tagging + multi-env scaffolding (ADR-0005) ← **Complete** (2026-06-03)
+2. Network (VNet, subnets, NSGs, private DNS zones) ← **In progress** — Step 1 (mentor file written, Brian writing `network.tf`)
 3. Key Vault
 4. Log Analytics + Application Insights
 5. Container Registry
@@ -122,23 +122,28 @@ The first Claude Code session on the new device will have empty auto-memory. Tha
 
 This is the most important section. Re-read when in doubt.
 
-### Hands-on cadence for Phase 2 infra (effective 2026-05-13)
+### Hands-on cadence for Phase 2 infra (effective 2026-05-13, revised 2026-06-03)
 
-**Brian drives configuration and decisions; Claude scaffolds and mentors.** This flips the prior "Claude builds, Brian reviews" model.
+**Brian writes the code and makes the decisions; Claude mentors and reviews.** This flips the prior "Claude builds, Brian reviews" model.
 
-Per-module loop:
+Per-step loop:
 
-1. Claude scaffolds a `.tf` file with `[D#]` decision markers.
-2. Claude sends a mentor message (textbook line / production reality / recommended pick / what to do per decision).
-3. Brian fills in values.
+1. Claude writes a mentor file at `docs/mentor/m{module}-s{step}-{topic}.md` containing:
+   - Decision sections ([D#]) — textbook line / production reality / recommended pick per decision
+   - A **"Resources to write"** section listing each resource by type and logical name, key arguments, non-obvious requirements (e.g. required delegations, settings that look wrong but are mandatory), and a link to the relevant Terraform provider doc
+   - **No HCL syntax to copy-paste.** Argument names go in prose, not in code blocks.
+2. Brian writes the `.tf` file from scratch using the mentor file + provider docs, and decides [D#] values.
+3. Brian runs `terraform fmt` and sends back for review.
 4. Claude reviews (sign off / push back / flag gaps).
-5. Brian runs `terraform fmt`, `plan`, `apply`.
-6. Brian drafts `docs/services/<thing>.md` + changelog entry; Claude edits line-by-line with reasoning.
+5. Brian runs `terraform plan`, then `apply`.
+6. Brian drafts the service doc (`docs/services/<thing>.md`) + changelog entry; Claude edits line-by-line with reasoning.
 7. ADRs: same pattern — Brian drafts, Claude edits.
 
-Mentor messages persist to `docs/mentor/m{module}-s{step}-{topic}.md` for cross-session/cross-device reference. After deciding, Brian fills in the "Decisions Brian made" section at the bottom of each mentor file.
+After deciding, Brian fills in the "Decisions Brian made" section at the bottom of each mentor file.
 
-**Why:** interview-defensibility — having *written* the docs and made the decisions, not just having read them.
+**Why no scaffold?** The keystroke reps and the forced doc-reading are the point. A scaffold with [D#] placeholders looks helpful but short-circuits both. Typing every argument and looking up syntax in the provider docs is what builds the muscle memory that interview-defensibility depends on.
+
+**Exception — editing existing files:** when modifying a `.tf` file that already exists (refactor, adding a resource to an existing module, fixing a bug), Claude can edit directly. The "Brian writes from scratch" rule applies to new files.
 
 **What stays Claude-driven:** audit/inventory commands (`az ...`, `terraform state list`), file moves, repo plumbing. The line: **if the action embeds a decision, Brian makes it.**
 
@@ -571,4 +576,4 @@ Each step has both a code deliverable and a documentation deliverable. A phase i
 
 ---
 
-*Last updated: 2026-05-21 — Module 1 Step 4 in progress. `docs/services/azure-resource-groups.md`: 6 of 8 sections drafted (Gotchas and Cost characteristics still skeleton); the drafted sections still need the line-by-line edit pass and removal of leftover `> **Fill in**` prompt remnants. `docs/changelog.md` has skeleton entries for Module 1 Steps 1–3 awaiting fill. Remaining for Step 4: finish + edit the service doc, fill the 3 changelog entries, write ADR-0005.*
+*Last updated: 2026-06-03 — Module 1 complete (RGs deployed, ADR-0005 accepted, service doc + changelog entries done). Module 2 Step 1 in progress: mentor file `docs/mentor/m2-s1-network.md` written; Brian writing `infra/environments/prod/network.tf` from scratch using the mentor file + Terraform azurerm provider docs. Hands-on cadence revised today — Claude no longer scaffolds `.tf` files with [D#] placeholders; resources are listed in the mentor file instead and Brian writes the HCL from scratch.*
