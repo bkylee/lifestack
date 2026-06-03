@@ -202,9 +202,43 @@ When you later add a service that needs its own subnet (e.g. Service Bus Premium
 
 ## Decisions Brian made
 
-_(Fill this in after committing.)_
+_(Fill this in after the file is correct and committed. Currently in revision — see Review notes below.)_
 
-- [D1]
-- [D2]
-- [D3]
-- [D4]
+- [D1] VNet CIDR = `10.0.0.0/16` (chosen, correct)
+- [D2] ACA subnet = `10.0.0.0/24` (chosen, correct)
+- [D3] PG subnet = **target** `10.0.1.0/28` (Brian's first draft used `10.0.0.0/28` — overlaps with ACA; needs fix)
+- [D4] PE subnet = **target** `10.0.2.0/27` (Brian's first draft used `10.0.0.0/27` — overlaps with ACA; needs fix)
+
+---
+
+## Review notes (2026-06-03)
+
+**Status of `infra/environments/prod/network.tf` at end of 2026-06-03 session:** WIP. VNet + three inline subnet blocks written. **Not yet correct.** Issues identified in review:
+
+### Critical (must fix before plan/apply)
+
+1. **Inline `subnet {}` blocks were used instead of standalone `azurerm_subnet` resources.** The inline syntax exists for backwards compatibility and does not support `delegation`, `private_endpoint_network_policies`, or NSG associations. Required fix: delete the inline blocks; write three top-level `resource "azurerm_subnet" "aca" / "pg" / "pe"` resources, each pointing at the VNet via `virtual_network_name`. See "Resources to write" above for argument lists.
+2. **All three subnet CIDRs overlapped at `10.0.0.0`.** Per the [D2]/[D3]/[D4] recommendations: ACA `10.0.0.0/24`, PG `10.0.1.0/28` (note the `1`), PE `10.0.2.0/27` (note the `2`). Different `10.0.X.x` ranges so they do not overlap.
+3. **`resource_group_name = azurerm_resource_group.rg_names.name` is missing the map key.** `rg_names` is a `for_each` resource (a map). Required: `azurerm_resource_group.rg_names["network"].name`. Same pattern in `resource_groups.tf` is the reference.
+4. **`location = locals.location` should be `local.location`** (singular). The block is `locals`, the reference is `local.`.
+
+### Style / convention
+
+5. **Terraform logical name was `vnet-lifestack-network-prod`** — use `"main"` instead, so references read as `azurerm_virtual_network.main.id`.
+6. **`name = "vnet-prod"`** should be `"vnet-${local.project}-${local.environment}"` for consistency with the RG naming convention.
+7. **Missing `tags = local.base_tags`** on the VNet.
+
+### Missing resources (per "Resources to write" above)
+
+After fixing 1–7 you still need:
+- 3 × `azurerm_network_security_group` (aca, pg, pe)
+- 3 × `azurerm_subnet_network_security_group_association`
+- A `locals` block defining the 4 private DNS zone FQDNs
+- 1 × `azurerm_private_dns_zone` with `for_each`
+- 1 × `azurerm_private_dns_zone_virtual_network_link` with `for_each`
+
+**Expected total resource count after a full correct pass: 18.** `terraform plan` should print "Plan: 18 to add, 0 to change, 0 to destroy."
+
+### Recommended next move when resuming
+
+Open `network.tf`, rewrite the VNet block first (fixing issues 3–7), then add the three standalone subnets, then the NSG layer, then the DNS layer. Send back for review after the VNet alone is correct so any pattern issues are caught early before they replicate across all the other resources.
