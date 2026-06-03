@@ -29,9 +29,13 @@ The only differences between environments are the state key in `backend.tf` and 
 
 
 ### Module 1, Step 4 — service doc + ADR-0005
-*Commit: TBD*
+*Commits: `07bf552` (ADR-0005), `e52a93c` (service doc edit pass)*
 
-> **Basically what's written here** — `docs/services/azure-resource-groups.md` drafted by Brian and edited line-by-line. ADR-0005 (multi-env strategy) drafted by Brian and edited. Module 1 complete.
+Brian drafted `docs/services/azure-resource-groups.md` covering all eight sections, then Claude did a line-by-line edit pass: merged the scaffold blockquote prompts into prose, removed all `>` remnants, fixed typos (`obersvability`, `storagge`), converted the "Why we use it" paragraph into a bulleted list matching the Mental model section, and added two alternatives to the Alternatives considered section that the draft had omitted (one-RG-per-resource and lifecycle/churn-rate grouping).
+
+ADR-0005 covers the two multi-env decisions made in Module 1: deploy prod only in v1 (cost — no large migrations to justify extra envs yet), and use light duplication over Terragrunt or a shared root module (overkill at this HCL volume; Terragrunt earns its keep at 10+ envs). Both decisions are documented with explicit triggers for revisiting.
+
+Module 1 complete.
 
 ---
 
