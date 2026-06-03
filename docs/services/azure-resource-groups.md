@@ -1,54 +1,50 @@
- Azure Resource Groups
+# Azure Resource Groups
 
 ## What it is
 
-Resource groups are logical containment of Azure resources. RG groups have meta data and can be used to lifecycle the collective resources together. We created them in module 1 and filled with Module 2 onward. 
+Resource groups are logical containers for Azure resources. Each group holds a set of related resources, shares their lifecycle (deleting the group deletes everything in it), and acts as a boundary for RBAC and cost reporting. We created the four prod resource groups in Module 1; subsequent modules deploy their resources into them.
 
 ## Why we use it
 
-We wanted to split up our resources into 4 groups based on function. Having tiers reflects RBAC (resource groups for specific teams), costs separated per tier, blast-radius isolation (easily destroy/ redeploy resources without touching all resources.). I want to replicate a production environment wherever possible as this is a project focused on learning rather than on full efficiency. 
+We split resources into four groups by function — network, data, app, and observability — rather than putting everything in one group. The split gives us:
 
+- **Lifecycle isolation:** tearing down or redeploying one tier doesn't touch the others.
+- **Cost reporting per tier:** Azure Cost Management rolls up by resource group, so we can see what the network layer costs vs. the app layer.
+- **Scoped RBAC:** in a team environment, you'd grant a DBA access to the data RG only. We're solo now, but the pattern is production-realistic.
+
+The goal is to replicate real-world production structure, not minimize resource count. Learning value over operational simplicity for this project.
 
 ## How it's configured here
 
-We created 4 RG groups for prod: network, data, app, and obersvability. The naming pattern we are using is 'rg -{project}-{tier}'. 
+Four RGs for prod: `rg-lifestack-network-prod`, `rg-lifestack-data-prod`, `rg-lifestack-app-prod`, `rg-lifestack-observability-prod`. Pattern: `rg-{project}-{tier}-{environment}`.
 
-We created these groups by using a terraform for each loop within a single 'azurerm_resource_group block in infra/environments/prod/resource_groups.tf. It uses the 'rb_names' map in locals.tf. Easier to manage than hardcoded files. 
+Created using a single `azurerm_resource_group` block with `for_each = local.rg_names` in `infra/environments/prod/resource_groups.tf`, driven by the `rg_names` map in `locals.tf`. `for_each` over a map rather than `count` over a list — map keys give stable state addresses; list indices don't. Renaming an entry in a list shifts all downstream indices; renaming a map key only affects that key. See `docs/mentor/m1-s2-resource-groups.md` for the full reasoning.
 
-We set the region to eastus2 for all (local.location) and base tags (local.base_tags) 
+Region: all four in `eastus2` (`local.location`). Tags: every RG gets `local.base_tags` — `project`, `environment`, `managed_by = terraform` (the signal that a resource is IaC-managed, not portal-created).
 
-The provider 'features' block in main.tf is used to set behaviours for certain settings for services. We set prevent_deletion_if_contains_resources = true for resource_group. 
+The provider `features` block in `main.tf` sets `resource_group { prevent_deletion_if_contains_resources = true }`. This makes Terraform refuse to destroy a non-empty resource group — a guardrail against accidentally wiping a tier.
 
-There is one RG that is not managed here 'rg-lifestack-tfstate' which contains the Terraform state storagge account. 
-
-— The concrete setup:
-> - The four RGs and their names: `rg-lifestack-network-prod`, `rg-lifestack-data-prod`, `rg-lifestack-app-prod`, `rg-lifestack-observability-prod` — pattern `rg-{project}-{tier}-{environment}`.
-> - How they're created: a single `azurerm_resource_group` block with `for_each = local.rg_names` (`infra/environments/prod/resource_groups.tf`), driven by the `rg_names` map in `locals.tf`.
-> - Why `for_each` over a map and not `count` — see `docs/mentor/m1-s2-resource-groups.md`; the short version is that map keys give stable state addresses, list indices don't.
-> - Region: all four in `eastus2` (`local.location`). Tags: every RG gets `local.base_tags` (`project`, `environment`, `managed_by`).
-> - The provider `features` block in `main.tf`: `resource_group { prevent_deletion_if_contains_resources = true }` — what it does.
-> - The one RG **not** managed here: `rg-lifestack-tfstate` (holds the Terraform state storage account) was bootstrapped by hand before Terraform existed and lives outside this config.
+One RG is **not** managed here: `rg-lifestack-tfstate`, which holds the Terraform state storage account. It was bootstrapped by hand before Terraform existed and lives outside this config intentionally.
 
 ## Mental model
 
-Remember RGs are used for the following: 
-- lifecycles
-- RBAC
-- Cost 
+Three things resource groups do simultaneously:
 
-local.rg_names is the single source of truth for RGs. We edit one line in the map. 
+1. **Lifecycle boundary** — delete the RG, delete everything in it. This is how you cleanly remove a whole tier.
+2. **RBAC boundary** — roles assigned at RG scope apply to all resources in it. Tier-split = scoped access control.
+3. **Cost rollup** — Cost Management aggregates by RG by default. Tier-split = per-tier cost visibility.
 
-for_each is part fo the state address 'azurerm_resource_group.rg_names["network"]. Renaming a key will destroy and re-create, not just rename. 
-* — The 2–3 concepts to hold in your head:
-> 1. An RG is a three-in-one boundary — lifecycle (delete the RG, delete its contents), RBAC (roles assigned at RG scope), and cost (Cost Management rolls up by RG).
-> 2. `local.rg_names` is the single source of truth for which RGs exist — adding a tier is a one-line map edit, not a new resource block.
-> 3. The `for_each` key becomes part of the state address (`azurerm_resource_group.rg_names["network"]`) — the key *is* identity, so renaming a key is a destroy-and-recreate, not a rename.
+`local.rg_names` is the single source of truth for which RGs exist. Adding a tier is a one-line map edit, not a new resource block.
+
+The `for_each` key is the state address: `azurerm_resource_group.rg_names["network"]`. Renaming a key is a destroy-and-recreate in Terraform's eyes, not a rename — the old resource disappears and a new one appears.
 
 ## Alternatives considered
 
-Flat single RG. It's simpler but lumps all costs and resources together. I want to replicate close to real-world environments. 
+**Flat single RG** — simpler (one RBAC grant covers everything, one blast-radius boundary), but lumps all costs together and forecloses tier-scoped access control. Ruled out because the split is low-cost to add now and matches how real production environments are structured.
 
- — The flat single-RG option, the other half of [D5]. Lift the FLAT-vs-SPLIT trade-off from `docs/mentor/m1-s1-locals.md`: flat is simpler (one RBAC grant = whole env, one blast-radius boundary) but lumps all cost together and forecloses tier-scoped RBAC. Briefly note the patterns not seriously considered and why — one RG per resource (far too granular, no benefit) and grouping by lifecycle/churn rate instead of by tier (a real pattern, but tier-grouping matches how this stack's modules are organized).
+**One RG per resource** — too granular; no practical benefit and significant management overhead.
+
+**Group by lifecycle/churn rate** (e.g., stable infra together, frequently-updated app resources together) — a real pattern, but tier-grouping maps better to how this project's modules are organized and how team ownership would be assigned.
 
 ## Common operations
 
@@ -77,11 +73,11 @@ terraform destroy -target='azurerm_resource_group.rg_names["app"]'
 
 ## Gotchas
 
-Resource Groups's 'location' is only metadata. Resources in the RG can be deployed in other regions 
+The `location` on a resource group is metadata only — it does not constrain where resources inside it are deployed. Resources in a group can live in any region regardless of the group's location field.
 
 ## Cost characteristics
 
-RGs are free. We use them to split costs.
+Resource groups are free. Their value is in cost *visibility*: Cost Management rolls up by RG, so the tier split lets us see what each layer costs without additional tagging queries.
 
 ## Authoritative docs
 
