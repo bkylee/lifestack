@@ -72,21 +72,6 @@ resource "azurerm_network_security_group" "pe" {
 }
 
 #NSG-subnet associations
-moved {
-  from = azurerm_subnet_network_security_group_association.snet-aca-nsg-association-prod
-  to   = azurerm_subnet_network_security_group_association.aca
-}
-
-moved {
-  from = azurerm_subnet_network_security_group_association.snet-pg-nsg-association-prod
-  to   = azurerm_subnet_network_security_group_association.pg
-}
-
-moved {
-  from = azurerm_subnet_network_security_group_association.snet-pe-nsg-association-prod
-  to   = azurerm_subnet_network_security_group_association.pe
-}
-
 resource "azurerm_subnet_network_security_group_association" "aca" {
   subnet_id                 = azurerm_subnet.aca.id
   network_security_group_id = azurerm_network_security_group.aca.id
