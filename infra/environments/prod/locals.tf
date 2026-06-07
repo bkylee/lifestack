@@ -18,4 +18,11 @@ locals {
     app           = "rg-${local.project}-app-${local.environment}"
     observability = "rg-${local.project}-observability-${local.environment}"
   }
+
+  private_dns_zones = {
+    pg   = "privatelink.postgres.database.azure.com"
+    acr  = "privatelink.azurecr.io"
+    blob = "privatelink.blob.core.windows.net"
+    kv   = "privatelink.vaultcore.azure.net"
+  }
 }
