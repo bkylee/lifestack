@@ -25,7 +25,7 @@ Think Letterboxd, but unified across *all* a person's hobbies in one profile.
 **Module sequence:**
 
 1. Resource groups + naming/tagging + multi-env scaffolding (ADR-0005) ← **Complete** (2026-06-03)
-2. Network (VNet, subnets, NSGs, private DNS zones) ← **In progress** — Step 1 (mentor file written, Brian writing `network.tf`)
+2. Network (VNet, subnets, NSGs, private DNS zones) ← **Infra applied (2026-06-11)** — `network.tf` written, reviewed, plan+apply clean (18 resources). Closing docs: changelog done; service doc (`docs/services/azure-network.md`) + `architecture.md` network topology still to write.
 3. Key Vault
 4. Log Analytics + Application Insights
 5. Container Registry
@@ -576,4 +576,4 @@ Each step has both a code deliverable and a documentation deliverable. A phase i
 
 ---
 
-*Last updated: 2026-06-03 (end of session) — Module 1 complete. Module 2 Step 1 in progress: `infra/environments/prod/network.tf` is **WIP and not yet correct** — VNet + inline subnet blocks written, several issues identified in review. **Resuming work? Read `docs/mentor/m2-s1-network.md` → "Review notes (2026-06-03)" first** — it has the full punch list (inline subnets need to become standalone `azurerm_subnet` resources, CIDRs overlap, RG reference is missing the map key, etc.) plus the remaining resources to add. Expected resource count after full correct pass: 18. After fixing, run `terraform fmt` + `plan` + send back for review before `apply`. Hands-on cadence revised this session — Claude no longer scaffolds `.tf` files with [D#] placeholders.*
+*Last updated: 2026-06-11 — Module 2 (Network) infra is applied: `infra/environments/prod/network.tf` written, reviewed, and `plan`+`apply` clean (18 resources — VNet, 3 subnets with ACA/PG delegations, 3 NSGs + associations, 4 private DNS zones + VNet links). Changelog entry `docs/changelog/phase-2-vnet.md` written. **Remaining to close Module 2:** Brian drafts `docs/services/azure-network.md` (Claude edits), and the network-topology section of `docs/architecture.md` gets updated. **Next module:** 3 — Key Vault; Claude writes `docs/mentor/m3-s1-key-vault.md`, Brian writes `keyvault.tf`. Hands-on cadence: Claude no longer scaffolds `.tf` files with [D#] placeholders.*
