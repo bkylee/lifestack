@@ -51,24 +51,21 @@ Trade-off I'm explicit about: **understanding > shipping**. When choices arise b
 
 ## Current state — honest
 
-**As of 2026-06-14: Phase 2 (infrastructure restart), Modules 1–2 complete, Module 3 (Key Vault) in progress.**
+**Live status lives in `CLAUDE.md` → "Current phase".** That section is the single source of truth for which Phase 2 module is built, applied, or in progress — it updates as modules complete, so this doc doesn't duplicate (and drift from) it. Read it there; the framing below is what stays true regardless of which module is active.
 
-What's actually deployed:
-- Terraform state backend (storage account in `rg-lifestack-tfstate`)
-- 4 production resource groups (network / data / app / observability), provisioned via `for_each` over a map
-- Multi-environment Terraform structure (`prod` deployed; `dev` / `staging` scaffolded for future use)
-- Naming and tagging conventions enforced via `locals.tf`
-- Network layer (Module 2): VNet `10.0.0.0/16` with three purpose-built subnets — `snet-aca` (/24, delegated to Container Apps), `snet-pg` (/28, delegated to Postgres Flexible Server), `snet-pe` (/27, private-endpoint network policies disabled) — three NSGs, and four private DNS zones linked to the VNet, ready to resolve private endpoints as downstream services land
+The work is sequenced as numbered Phase 2 modules, each deployed by hand and documented before moving on:
 
-What's NOT yet built:
-- Key Vault with the project's first private endpoint (Module 3, in progress — mentor file written, `keyvault.tf` not yet authored)
-- Log Analytics + Application Insights (Module 4)
-- Container Registry (Module 5)
-- Postgres with private endpoint (Module 6)
-- Container Apps with managed identity (Module 7)
-- Front Door (Module 8)
-- End-to-end smoke test (Module 9)
-- The entire application layer (Phase 3+)
+1. Resource groups + naming/tagging + multi-env scaffolding
+2. Network — VNet, subnets, NSGs, private DNS zones
+3. Key Vault (first private endpoint)
+4. Log Analytics + Application Insights
+5. Container Registry
+6. Postgres Flexible Server (private endpoint)
+7. Container Apps + managed identity
+8. Front Door
+9. End-to-end smoke test
+
+The application layer (Next.js / Prisma / the product itself) is Phase 3+ and deliberately deferred until the infrastructure is in place.
 
 **Important framing context**: Phase 2 was deliberately torn down and restarted on 2026-05-13. The first-pass infrastructure (29 Azure resources) had been built too quickly with too much automation, and I lost the learning that was the point of the project. The restart uses a hands-on cadence — I drive every configuration decision myself, with Claude scaffolding and mentoring — so the resulting docs and decisions are ones I personally made and can defend.
 
