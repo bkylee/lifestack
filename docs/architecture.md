@@ -6,9 +6,9 @@
 
 ## High-level architecture diagram
 
-### Current state (Phase 1 complete + Phase 2 steps 2.1–2.5)
+### Current state (Phase 1 complete + Phase 2 Module 1 RGs + Module 2 network)
 
-The running application is still local; the Azure footprint now includes the network plumbing, the Postgres Flex server, and the container registry. No images have been pushed yet — the registry is empty until CI/CD lands in Step 2.6. No app, storage, secrets, or observability resources are provisioned yet — those come in Steps 2.6–2.10.
+The running application is still local. The Azure footprint is the network plumbing only: four resource groups (network / data / app / observability) plus the surviving state backend, with the VNet, subnets, NSGs, and private DNS zones provisioned in the network RG. The data, app, and observability RGs are empty — Key Vault (Module 3), Log Analytics + App Insights (Module 4), ACR (Module 5), Postgres Flex (Module 6), Container Apps (Module 7), and Front Door (Module 8) are not provisioned yet.
 
 ```mermaid
 flowchart TB
@@ -34,25 +34,20 @@ flowchart TB
       SA["State SA<br/>stlifestack9k3l"]
     end
     subgraph NetRG["rg-lifestack-network-prod"]
-      VNet["VNet vnet-lifestack-prod · 10.10.0.0/16<br/>3 subnets (aca /23, pg /24, pe /27)<br/>3 NSGs (placeholder defaults)<br/>4 private DNS zones, all linked"]
+      VNet["VNet vnet-lifestack-prod · 10.0.0.0/16<br/>3 subnets (aca /24, pg /28, pe /27)<br/>3 NSGs (placeholder defaults)<br/>4 private DNS zones, all linked"]
     end
-    subgraph DataRG["rg-lifestack-data-prod"]
-      Pg2[("Postgres Flex B1ms<br/>psql-lifestack-prod<br/>private IP 10.10.2.4<br/>public access disabled")]
+    subgraph DataRG["rg-lifestack-data-prod (empty)"]
     end
-    subgraph AppRG["rg-lifestack-app-prod"]
-      ACR2["ACR Basic<br/>crlifestackehyp.azurecr.io<br/>admin disabled · public endpoint<br/>(empty — no images yet)"]
+    subgraph AppRG["rg-lifestack-app-prod (empty)"]
     end
     subgraph ObsRG["rg-lifestack-observability-prod (empty)"]
     end
-    Budget(("$100/mo budget<br/>alert at 80% / 100% / 100%-forecast"))
+    Budget(("$100/mo subscription budget<br/>alert at 80% / 100% / 100%-forecast"))
   end
 
   TfCLI["Terraform CLI<br/>(developer machine)"]
   TfCLI <-->|AAD auth via az login| SA
   TfCLI -->|terraform apply| NetRG
-  TfCLI -->|terraform apply| DataRG
-  TfCLI -->|terraform apply| AppRG
-  Pg2 -.->|delegated NIC| VNet
 ```
 
 ### Target state (end of Phase 2 — v1 prod)
@@ -69,7 +64,7 @@ flowchart TB
     FD["Front Door Standard<br/>WAF · CDN · TLS"]
 
     subgraph NetRG["rg-lifestack-network-prod"]
-      VNet["VNet vnet-lifestack-prod<br/>10.10.0.0/16<br/>3 subnets · 4 PE DNS zones"]
+      VNet["VNet vnet-lifestack-prod<br/>10.0.0.0/16<br/>3 subnets · 4 PE DNS zones"]
     end
 
     subgraph AppRG["rg-lifestack-app-prod"]
@@ -240,11 +235,11 @@ Server actions bypass Front Door's CDN (POST requests are not cached). They run 
 |---|---|---|
 | Subscription | `Lifestack` provisioned, 9 resource providers registered (Step 2.1) | unchanged |
 | Cost guardrail | $100/month subscription budget with alerts at 80/100% actual + 100% forecast (Step 2.2.1) | unchanged |
-| IaC | Terraform state backend + prod env + 4 prod RGs + budget + network + Postgres + ACR modules applied (Step 2.2 → 2.5) | All v1 resources defined as Terraform modules and applied to prod |
-| Region | `eastus2` (originally `eastus` until `LocationIsOfferRestricted` on Postgres Flex forced a move in Step 2.4) | unchanged |
-| Network | VNet `10.10.0.0/16` in `rg-lifestack-network-prod` with 3 delegated/restricted subnets and 4 linked private DNS zones (Step 2.3) | Same — downstream modules wire private endpoints into `snet-pe-prod` |
-| App | Running locally via `pnpm dev` against Docker Postgres. ACR Basic provisioned in `rg-lifestack-app-prod` (`crlifestackehyp.azurecr.io`); empty until CI pushes the first image in Step 2.6. | Containerized, deployed to Container Apps with workload profiles + scale-to-zero, talking to Postgres Flex over the VNet |
-| Database | **Azure Postgres Flex B1ms** in `rg-lifestack-data-prod`, public access disabled, NIC at `10.10.2.4` in `snet-pg-prod`, `vector` extension allowlisted (Step 2.4). App still points at local Docker Postgres until Container Apps lands. | Same — Container Apps consumes the connection string from Key Vault |
+| IaC | Terraform state backend + prod env + 4 prod RGs + subscription budget + network applied (Modules 1–2). Key Vault is the active module (Module 3). | All v1 resources defined as Terraform modules and applied to prod |
+| Region | `eastus2` (originally `eastus` until `LocationIsOfferRestricted` on Postgres Flex forced a move during the Phase 2 first pass) | unchanged |
+| Network | VNet `10.0.0.0/16` in `rg-lifestack-network-prod` with 3 delegated/restricted subnets and 4 linked private DNS zones (Module 2) | Same — downstream modules wire private endpoints into `snet-pe-prod` |
+| App | Running locally via `pnpm dev` against Docker Postgres. No ACR or Container Apps provisioned yet (Modules 5 and 7). | Containerized, deployed to Container Apps with workload profiles + scale-to-zero, talking to Postgres Flex over the VNet |
+| Database | Not yet provisioned (Module 6). App points at local Docker Postgres. The `snet-pg-prod` subnet and the `privatelink.postgres.database.azure.com` DNS zone are pre-built and waiting. | Azure Postgres Flex B1ms in `rg-lifestack-data-prod`, public access disabled, private NIC in `snet-pg-prod`; Container Apps consumes the connection string from Key Vault |
 | Storage | Not configured | Blob Storage with private endpoint, separate containers for image sizes |
 | Edge | None | Front Door Standard with WAF |
 | Secrets | `.env.local` | Key Vault accessed via managed identity over private endpoint |
@@ -257,24 +252,24 @@ Each row moves from Current to Target as the corresponding Phase 2 sub-step comp
 
 ## Network topology
 
-The VNet is the private-network boundary for the v1 architecture. Three subnets serve different purposes (compute, database, private endpoints) and have different posture (delegations, NSGs, PE-network-policies). Four private DNS zones, all linked to the VNet, make `*.privatelink.*` lookups resolve to the right private IPs as PEs come online in Steps 2.4–2.8.
+The VNet is the private-network boundary for the v1 architecture. Three subnets serve different purposes (compute, database, private endpoints) and have different posture (delegations, NSGs, PE-network-policies). Four private DNS zones, all linked to the VNet, make `*.privatelink.*` lookups resolve to the right private IPs as PEs come online in the downstream modules (Key Vault first, then Postgres, ACR, and Blob).
 
 ```mermaid
 flowchart TB
   subgraph NetRG["rg-lifestack-network-prod"]
     direction TB
-    subgraph VNet["vnet-lifestack-prod &nbsp;·&nbsp; 10.10.0.0/16"]
+    subgraph VNet["vnet-lifestack-prod &nbsp;·&nbsp; 10.0.0.0/16"]
       direction LR
-      Aca["snet-aca-prod<br/>10.10.0.0/23<br/>delegation: Microsoft.App/environments<br/>NSG: nsg-aca-prod (default rules)"]
-      Pg["snet-pg-prod<br/>10.10.2.0/24<br/>delegation: Microsoft.DBforPostgreSQL/flexibleServers<br/>NSG: nsg-pg-prod (default rules)<br/>Postgres Flex NIC at 10.10.2.4 (Step 2.4)"]
-      Pe["snet-pe-prod<br/>10.10.3.0/27<br/>private_endpoint_network_policies = Disabled<br/>NSG: nsg-pe-prod (default rules)"]
+      Aca["snet-aca-prod<br/>10.0.0.0/24<br/>delegation: Microsoft.App/environments<br/>NSG: nsg-aca-prod (default rules)"]
+      Pg["snet-pg-prod<br/>10.0.1.0/28<br/>delegation: Microsoft.DBforPostgreSQL/flexibleServers<br/>NSG: nsg-pg-prod (default rules)"]
+      Pe["snet-pe-prod<br/>10.0.2.0/27<br/>private_endpoint_network_policies = Disabled<br/>NSG: nsg-pe-prod (default rules)"]
     end
 
     subgraph DNS["Private DNS zones (each linked to VNet)"]
-      Z1["privatelink.postgres.database.azure.com<br/>→ Postgres Flex (Step 2.4, A record live)"]
-      Z2["privatelink.azurecr.io<br/>→ ACR (Step 2.5)"]
-      Z3["privatelink.blob.core.windows.net<br/>→ Blob Storage (Step 2.7)"]
-      Z4["privatelink.vaultcore.azure.net<br/>→ Key Vault (Step 2.8)"]
+      Z1["privatelink.postgres.database.azure.com<br/>→ Postgres Flex (Module 6)"]
+      Z2["privatelink.azurecr.io<br/>→ ACR (Module 5)"]
+      Z3["privatelink.blob.core.windows.net<br/>→ Blob Storage (Phase 3)"]
+      Z4["privatelink.vaultcore.azure.net<br/>→ Key Vault (Module 3, active)"]
     end
   end
 ```
