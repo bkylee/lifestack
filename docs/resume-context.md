@@ -51,17 +51,19 @@ Trade-off I'm explicit about: **understanding > shipping**. When choices arise b
 
 ## Current state — honest
 
-**As of 2026-05-24: Phase 2 (infrastructure restart), Module 1 in progress.**
+**As of 2026-06-14: Phase 2 (infrastructure restart), Modules 1–2 complete, Module 3 (Key Vault) in progress.**
 
 What's actually deployed:
 - Terraform state backend (storage account in `rg-lifestack-tfstate`)
 - 4 production resource groups (network / data / app / observability), provisioned via `for_each` over a map
 - Multi-environment Terraform structure (`prod` deployed; `dev` / `staging` scaffolded for future use)
 - Naming and tagging conventions enforced via `locals.tf`
+- Network layer (Module 2): VNet `10.0.0.0/16` with three purpose-built subnets — `snet-aca` (/24, delegated to Container Apps), `snet-pg` (/28, delegated to Postgres Flexible Server), `snet-pe` (/27, private-endpoint network policies disabled) — three NSGs, and four private DNS zones linked to the VNet, ready to resolve private endpoints as downstream services land
 
 What's NOT yet built:
-- Network layer — VNet, subnets, NSGs, private DNS zones (Module 2)
-- Key Vault, Log Analytics, Application Insights, Container Registry (Modules 3–5)
+- Key Vault with the project's first private endpoint (Module 3, in progress — mentor file written, `keyvault.tf` not yet authored)
+- Log Analytics + Application Insights (Module 4)
+- Container Registry (Module 5)
 - Postgres with private endpoint (Module 6)
 - Container Apps with managed identity (Module 7)
 - Front Door (Module 8)
@@ -111,4 +113,4 @@ If the desktop app needs deeper context on a specific area, ask me to upload:
 
 ---
 
-*Last updated: 2026-05-24*
+*Last updated: 2026-06-14*
