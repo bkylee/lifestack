@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Claude Code memory (local tooling state, not project code)
 .claude/
+
+# third-party tooling clones living in the working dir (not project content)
+/claude-code-sync/
