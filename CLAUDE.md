@@ -41,6 +41,15 @@ Blob storage, CI/CD, app deploy deferred to Phase 3+.
 
 Update this section as modules complete.
 
+### Cost control — prod is ephemeral (added 2026-06-17)
+
+Treat `environments/prod` as **stand-up-to-work, tear-down-when-done**, not a 24/7 service. The fixed-cost resources that can't scale to zero (Front Door ~$35/mo, ACR, private endpoints ~$7/mo each, Postgres storage) are a launch-time cost, not a learning-time one — during the build, only stand them up while actively working a module. Everything is reproducible from Terraform; the tfstate storage account (`stlifestack9k3l`) survives a teardown. Brian uses CAD, so the idle full-stack floor (~$82–123 CAD/mo) is deliberately avoided this way.
+
+- `scripts/standup.sh [-y]` — `terraform init` + `apply`
+- `scripts/teardown.sh [-y]` — `terraform destroy`, then purges any soft-deleted Key Vault (its globally-unique name stays reserved 7 days otherwise, blocking the next standup — works because purge protection is OFF per Module 3 design)
+
+Both require `az login` and pin the CLI to the lifestack subscription (read from `terraform.tfvars`); `-y` skips confirmation prompts. Default leaves Terraform's native prompt as the safety rail. Still TODO: a CAD budget alert (~$25 CAD) and writing `docs/operations/cost.md` from this.
+
 ---
 
 ## Who I am
@@ -576,4 +585,4 @@ Each step has both a code deliverable and a documentation deliverable. A phase i
 
 ---
 
-*Last updated: 2026-06-15 — Module 2 closed. `docs/services/azure-network.md` was written into a full service doc across all nine template sections (Brian drafted, Claude edited): What it is, Why we use it, How it's configured here (incl. the 3 NSGs + subnet associations), Mental model, Alternatives considered (the two networking forks — managed-vs-explicit VNet integration, and public-firewall-vs-private-endpoint), Common operations, Gotchas (incl. the ACA `/24` minimum-subnet-size caveat to confirm at Module 7), Cost characteristics, and Authoritative docs (azurerm provider pages + Azure private-endpoint-DNS concepts links). CIDR ground truth unchanged: VNet `10.0.0.0/16`, `snet-aca /24`, `snet-pg /28`, `snet-pe /27`. **Next action (any device):** start Module 3 (Key Vault) — write `infra/environments/prod/keyvault.tf` from scratch per `docs/mentor/m3-s1-key-vault.md` ([D1]–[D5] + 5 resources incl. the project's first private endpoint); get public IP with `curl -s ifconfig.me` first, run `terraform fmt`, then send for review before `plan` (expect "4 to add"). Hands-on cadence unchanged: Brian writes new `.tf` from scratch, no [D#] scaffolds.*
+*Last updated: 2026-06-17 — added ephemeral-prod cost-control scripts (`scripts/standup.sh` + `scripts/teardown.sh` + shared `scripts/_tf_common.sh`), committed to `main` and pushed so they sync to other devices via `git pull`. See the new "Cost control — prod is ephemeral" subsection under Current phase. The teardown purges soft-deleted Key Vaults so the destroy→standup cycle round-trips once Module 3 lands. Prior (2026-06-15): Module 2 closed. `docs/services/azure-network.md` was written into a full service doc across all nine template sections (Brian drafted, Claude edited): What it is, Why we use it, How it's configured here (incl. the 3 NSGs + subnet associations), Mental model, Alternatives considered (the two networking forks — managed-vs-explicit VNet integration, and public-firewall-vs-private-endpoint), Common operations, Gotchas (incl. the ACA `/24` minimum-subnet-size caveat to confirm at Module 7), Cost characteristics, and Authoritative docs (azurerm provider pages + Azure private-endpoint-DNS concepts links). CIDR ground truth unchanged: VNet `10.0.0.0/16`, `snet-aca /24`, `snet-pg /28`, `snet-pe /27`. **Next action (any device):** start Module 3 (Key Vault) — write `infra/environments/prod/keyvault.tf` from scratch per `docs/mentor/m3-s1-key-vault.md` ([D1]–[D5] + 5 resources incl. the project's first private endpoint); get public IP with `curl -s ifconfig.me` first, run `terraform fmt`, then send for review before `plan` (expect "4 to add"). Hands-on cadence unchanged: Brian writes new `.tf` from scratch, no [D#] scaffolds.*
