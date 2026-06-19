@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and fill in real values. terraform.tfvars is
+# gitignored — do NOT commit real values (especially deployer_ip).
+
+# Azure subscription to deploy into.
+subscription_id = "00000000-0000-0000-0000-000000000000"
+
+# Your current public IP, no CIDR suffix — the /32 is appended in keyvault.tf.
+# Refresh with `curl -s ifconfig.me` whenever your IP changes, or secret
+# writes to Key Vault will start returning 403. Set this from your own
+# network, not public wifi.
+deployer_ip = "203.0.113.10"

@@ -46,3 +46,15 @@ next-env.d.ts
 
 # third-party tooling clones living in the working dir (not project content)
 /claude-code-sync/
+
+# terraform
+# tfvars hold per-env values (subscription_id, deployer_ip) — keep out of git;
+# commit terraform.tfvars.example as the documented template instead.
+*.tfvars
+!*.tfvars.example
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+# NB: .terraform.lock.hcl is intentionally NOT ignored — it pins provider
+# versions and belongs in version control.
