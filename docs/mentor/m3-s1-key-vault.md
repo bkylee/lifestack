@@ -199,10 +199,30 @@ When you add Postgres in Module 6 and store its password, this is the machinery 
 
 ## Decisions Brian made
 
-_(Fill in after the file is correct and committed.)_
+_(Chosen and reflected in the `keyvault.tf` draft. File still has open fixes — see Review status below.)_
 
-- [D1] RG placement = _______
-- [D2] SKU = _______
-- [D3] Authorization model = _______
-- [D4] Network access model = _______
-- [D5] Purge protection / retention = _______
+- [D1] RG placement = **`app`** (`rg-lifestack-app-prod`)
+- [D2] SKU = **standard**
+- [D3] Authorization model = **RBAC** (`enable_rbac_authorization = true`) + deployer role assignment (`Key Vault Secrets Officer`)
+- [D4] Network access model = **public-with-firewall + PE** (`default_action = "Deny"`, `bypass = "AzureServices"`, allow deployer IP `/32`, plus private endpoint)
+- [D5] Purge protection / retention = **off**, `soft_delete_retention_days = 7`
+
+## Review status — 2026-06-21 (draft reviewed, NOT yet planned)
+
+`keyvault.tf` is drafted and was reviewed. Decisions above are correct. Before `terraform fmt` → `plan` (expect "4 to add"), these items are open:
+
+**Blockers (will fail `validate`/`plan`):**
+
+1. **Private endpoint is missing both nested blocks.** Only `name`/`location`/`resource_group_name`/`subnet_id` are present. Add:
+   - `private_service_connection` (required block, else validate fails): `name` (e.g. `psc-kv`), `private_connection_resource_id = azurerm_key_vault.main.id`, `subresource_names = ["vault"]`, `is_manual_connection = false`.
+   - `private_dns_zone_group`: `name` (e.g. `pdzg-kv`), `private_dns_zone_ids = [azurerm_private_dns_zone.zones["kv"].id]`.
+2. **`ip_rules = [${var.home_ip}]`** is broken three ways: variable is named **`deployer_ip`** (not `home_ip`); `${...}` can't sit unquoted in the list (interpolation only inside a string); and the `/32` must be appended per the variable's contract → make it a one-element list of the `deployer_ip` value interpolated into a string with `/32`. (If apply later rejects `/32` on the ACL, retry with the bare IP.)
+3. **`sku_name = "Standard"`** → lowercase **`"standard"`** (provider validation is case-sensitive here).
+
+**Should-fix (not fatal):**
+
+4. `public_network_access_enabled` is omitted — defaults to `true` so the ACL still works, but [D4] called for setting it explicitly. Add `= true`.
+5. Private endpoint has no `tags` — add `local.base_tags` for consistency with every other resource.
+6. Run `terraform fmt` — the draft is 4-space indented; fmt normalizes to 2-space + aligns `=`.
+
+**Already correct:** client_config data source; `random_string.kv_suffix` (uses `numeric`, not deprecated `number`); vault name length (22 ≤ 24, starts with a letter); RG=`app`; RBAC + deployer role assignment present together; role assignment scope/role/principal; `network_acls` default_action/bypass; `subnet_id = azurerm_subnet.pe.id`.
