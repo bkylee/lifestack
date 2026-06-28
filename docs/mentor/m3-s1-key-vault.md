@@ -207,11 +207,28 @@ _(Chosen and reflected in the `keyvault.tf` draft. File still has open fixes —
 - [D4] Network access model = **public-with-firewall + PE** (`default_action = "Deny"`, `bypass = "AzureServices"`, allow deployer IP `/32`, plus private endpoint)
 - [D5] Purge protection / retention = **off**, `soft_delete_retention_days = 7`
 
-## Review status — 2026-06-21 (draft reviewed, NOT yet planned)
+## Review status — RESOLVED & APPLIED (2026-06-28)
 
-`keyvault.tf` is drafted and was reviewed. Decisions above are correct. Before `terraform fmt` → `plan` (expect "4 to add"), these items are open:
+**Module 3 is deployed.** `terraform apply` created all 4 resources clean (`Plan: 4 to add` → applied; a later re-apply reported `0 added, 0 changed, 0 destroyed`, confirming state matches config). Live facts:
 
-**Blockers (will fail `validate`/`plan`):**
+- Vault: **`kv-lifestack-prod-tx9d`** (random suffix `tx9d`), in `rg-lifestack-app-prod`.
+- Private endpoint `pe-kv-lifestack-prod` got private IP **`10.0.2.4`** (inside `snet-pe`, 10.0.2.0/27); the A record `kv-lifestack-prod-tx9d.privatelink.vaultcore.azure.net → 10.0.2.4` was auto-created in the `privatelink.vaultcore.azure.net` zone by the `private_dns_zone_group`. PE wiring verified end-to-end via `terraform state show`.
+- Deployer role assignment (`Key Vault Secrets Officer`, principal `be7eec0a…`) present.
+
+**Verification note:** from a host *outside* the VNet (e.g. the WSL dev box), `nslookup` of the vault FQDN returns a **public** IP, not `10.0.2.4` — the private DNS zone is only authoritative inside the VNet. Confirm the private IP via `terraform state show azurerm_private_endpoint.kv` (or from an in-VNet host at Module 7), not via `nslookup` from the laptop.
+
+**All review items below were fixed before apply (kept as the historical record). Two extra fixes surfaced during `terraform validate` and were also applied:**
+
+- **tfvars mismatch:** `terraform.tfvars` still set an empty `home_ip`, but the config reads `var.deployer_ip`. Renamed the key to `deployer_ip` and set it to the current public IP `99.233.21.112` (bare IP; `/32` appended in config).
+- **Deprecation:** `enable_rbac_authorization` is deprecated (renamed to `rbac_authorization_enabled`, removed in azurerm v5.0). Switched to the new name; `validate` is now warning-free.
+
+---
+
+### Original review (2026-06-21) — items now resolved
+
+`keyvault.tf` was drafted and reviewed. Decisions above are correct. These items were open at review time and have since been fixed:
+
+**Blockers (would fail `validate`/`plan`):**
 
 1. **Private endpoint is missing both nested blocks.** Only `name`/`location`/`resource_group_name`/`subnet_id` are present. Add:
    - `private_service_connection` (required block, else validate fails): `name` (e.g. `psc-kv`), `private_connection_resource_id = azurerm_key_vault.main.id`, `subresource_names = ["vault"]`, `is_manual_connection = false`.
